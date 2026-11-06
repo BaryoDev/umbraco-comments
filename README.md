@@ -58,7 +58,7 @@ Section `BaryoDev:Comments` in appsettings:
 }
 ```
 
-`PageSize` is how many approved comments show before a "Show more comments" link. `MaxNameLength`, `MaxEmailLength` and `MaxBodyLength` are capped at the column sizes (80, 200, 4000). Email is stored only if given and is never shown on the page.
+`PageSize` is how many approved comments show per page, with "Earlier comments" and "Later comments" links. `MaxNameLength`, `MaxEmailLength` and `MaxBodyLength` are capped at the column sizes (80, 200, 4000). Email is stored only if given and is never shown on the page.
 
 ## Not in this version
 

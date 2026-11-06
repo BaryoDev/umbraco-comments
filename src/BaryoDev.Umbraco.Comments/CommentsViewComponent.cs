@@ -12,7 +12,8 @@ public sealed record CommentsModel(
     string ReturnUrl,
     IReadOnlyList<CommentView> Comments,
     int Total,
-    string? MoreUrl,
+    string? LaterUrl,
+    string? EarlierUrl,
     string DraftName,
     string DraftEmail,
     string DraftBody,
@@ -47,25 +48,27 @@ public sealed class CommentsViewComponent(ICommentRepository repository, FormTok
     public IViewComponentResult Invoke(Guid contentKey)
     {
         CommentsOptions o = options.Value;
-        int pages = int.TryParse(Request.Query["bdcp"].FirstOrDefault(), out int p) ? Math.Clamp(p, 1, 1000) : 1;
         int pageSize = Math.Clamp(o.PageSize, 1, 500);
-        var comments = repository.ListApproved(contentKey, pageSize * pages)
+        int total = repository.CountApproved(contentKey);
+        int pageCount = Math.Max(1, (total + pageSize - 1) / pageSize);
+        int page = int.TryParse(Request.Query["bdcp"].FirstOrDefault(), out int p) ? Math.Clamp(p, 1, pageCount) : 1;
+        var comments = repository.ListApproved(contentKey, (page - 1) * pageSize, pageSize)
             .Select(r => new CommentView(r.Name, r.CreatedUtc, r.Body))
             .ToList();
 
         string? code = Request.Query["bdc"].FirstOrDefault();
         string? notice = code is not null && Messages.TryGetValue(code, out var m) ? m : null;
 
-        int total = repository.CountApproved(contentKey);
         string path = Request.PathBase + Request.Path;
-        string? more = total > comments.Count ? $"{path}?bdcp={pages + 1}#comments" : null;
+        string? older = page < pageCount ? $"{path}?bdcp={page + 1}#comments" : null;
+        string? newer = page > 1 ? $"{path}?bdcp={page - 1}#comments" : null;
 
         bool failed = code?.StartsWith("error-", StringComparison.Ordinal) == true;
         string Draft(string key) => failed && TempData[key] is string s ? s : string.Empty;
 
         string returnUrl = path;
         return View(new CommentsModel(
-            contentKey, returnUrl, comments, total, more,
+            contentKey, returnUrl, comments, total, older, newer,
             Draft(CommentsController.DraftName), Draft(CommentsController.DraftEmail), Draft(CommentsController.DraftBody),
             tokens.Issue(), notice, failed,
             o.RequireEmail, Math.Min(o.MaxNameLength, CommentsOptions.HardNameLimit), Math.Min(o.MaxEmailLength, CommentsOptions.HardEmailLimit),

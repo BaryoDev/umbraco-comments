@@ -23,9 +23,12 @@
                 </li>
             }
         </ol>
-        @if (Model.MoreUrl is not null)
+        @if (Model.LaterUrl is not null || Model.EarlierUrl is not null)
         {
-            <p class="bdc__more"><a href="@Model.MoreUrl">Show more comments</a></p>
+            <p class="bdc__more">
+                @if (Model.EarlierUrl is not null) { <a href="@Model.EarlierUrl" rel="prev">Earlier comments</a> }
+                @if (Model.LaterUrl is not null) { <a href="@Model.LaterUrl" rel="next">Later comments</a> }
+            </p>
         }
     }
 

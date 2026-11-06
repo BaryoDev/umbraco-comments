@@ -5,7 +5,7 @@ public sealed record CommentCounts(int Pending, int Approved, int Spam);
 public interface ICommentRepository
 {
     void Add(CommentRow row);
-    IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int take);
+    IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int skip, int take);
     int CountApproved(Guid contentKey);
     int DeleteForContent(Guid contentKey);
     IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take);

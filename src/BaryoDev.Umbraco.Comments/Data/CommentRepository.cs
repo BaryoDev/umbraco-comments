@@ -11,10 +11,10 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
         scope.Complete();
     }
 
-    public IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int take)
+    public IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int skip, int take)
     {
         using var scope = scopeProvider.CreateScope(autoComplete: true);
-        return scope.Database.SkipTake<CommentRow>(0, take,
+        return scope.Database.SkipTake<CommentRow>(skip, take,
             "SELECT * FROM baryoComment WHERE ContentKey = @0 AND Status = @1 ORDER BY CreatedUtc ASC",
             contentKey, (int)CommentStatus.Approved);
     }
