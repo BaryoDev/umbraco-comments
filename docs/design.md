@@ -26,7 +26,7 @@ Public:
 
 Management API (backoffice token, content section access), under `/umbraco/management/api/v1/comments`:
 
-- `GET ?status=pending|approved|spam&skip=&take=` list, with counts per status
+- `GET ?status=pending|approved|spam&skip=&take=` list, with counts per status and a total, paged in SQL
 - `POST {id}/approve`
 - `POST {id}/spam`
 - `DELETE {id}`
@@ -37,6 +37,10 @@ Management API (backoffice token, content section access), under `/umbraco/manag
 - Honeypot field. If filled, the post is dropped and the visitor sees the normal pending message.
 - Minimum time on form. The form carries a data-protected timestamp. Posts faster than `MinSecondsOnForm` or older than `MaxFormAgeMinutes` are rejected.
 - Per-IP sliding window in memory. The IP is hashed with a random per-process key, so no raw IP is held and nothing survives a restart.
+- IPv6 clients share one bucket per /64.
+- Zero-width characters are stripped before length checks.
+- A failed post (including an antiforgery failure) redirects back with an error code and keeps what was typed, through TempData.
+- Deleting a page deletes its comments.
 - Length limits on name, email and body, enforced on the server.
 - The target node must exist and be published.
 - Body is stored as plain text and rendered encoded. Nothing is linkified.

@@ -4,6 +4,8 @@ public sealed class CommentsOptions
 {
     public const string Section = "BaryoDev:Comments";
     public const int HardBodyLimit = 4000;
+    public const int HardNameLimit = 80;
+    public const int HardEmailLimit = 200;
 
     public bool AutoApprove { get; set; }
     public bool RequireEmail { get; set; }
@@ -15,5 +17,5 @@ public sealed class CommentsOptions
     public int MaxFormAgeMinutes { get; set; } = 120;
     public int RateLimitMaxPosts { get; set; } = 5;
     public int RateLimitWindowMinutes { get; set; } = 10;
-    public int PageSize { get; set; } = 100;
+    public int PageSize { get; set; } = 50;
 }

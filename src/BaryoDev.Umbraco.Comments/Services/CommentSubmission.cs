@@ -44,7 +44,7 @@ public sealed class CommentSubmission(
         string email = Clean(input.Email, singleLine: true);
         string body = Clean(input.Body, singleLine: false);
 
-        if (name.Length == 0 || name.Length > o.MaxNameLength)
+        if (name.Length == 0 || name.Length > Math.Min(o.MaxNameLength, CommentsOptions.HardNameLimit))
         {
             return SubmitResult.NameRequired;
         }
@@ -52,7 +52,7 @@ public sealed class CommentSubmission(
         {
             return SubmitResult.EmailRequired;
         }
-        if (email.Length > 0 && !IsEmail(email, o.MaxEmailLength))
+        if (email.Length > 0 && !IsEmail(email, Math.Min(o.MaxEmailLength, CommentsOptions.HardEmailLimit)))
         {
             return SubmitResult.EmailInvalid;
         }
@@ -61,15 +61,15 @@ public sealed class CommentSubmission(
             return SubmitResult.BodyInvalid;
         }
 
+        if (!limiter.TryAcquire(input.Client, o.RateLimitMaxPosts, TimeSpan.FromMinutes(o.RateLimitWindowMinutes)))
+        {
+            return SubmitResult.RateLimited;
+        }
+
         var page = content.GetById(input.ContentKey);
         if (page is null || !page.Published)
         {
             return SubmitResult.NoSuchPage;
-        }
-
-        if (!limiter.TryAcquire(input.Client, o.RateLimitMaxPosts, TimeSpan.FromMinutes(o.RateLimitWindowMinutes)))
-        {
-            return SubmitResult.RateLimited;
         }
 
         repository.Add(new CommentRow
@@ -91,7 +91,7 @@ public sealed class CommentSubmission(
         {
             return false;
         }
-        return MailAddress.TryCreate(value, out var address) && address.Address == value;
+        return MailAddress.TryCreate(value, out var address) && address.Address == value && address.Host.Contains('.');
     }
 
     /// <summary>Trims, normalises line breaks and drops control characters.</summary>
@@ -104,6 +104,10 @@ public sealed class CommentSubmission(
         var sb = new System.Text.StringBuilder(value.Length);
         foreach (char c in value.Replace("\r\n", "\n").Replace('\r', '\n'))
         {
+            if (c is '\u200B' or '\u2060' or '\uFEFF')
+            {
+                continue;
+            }
             if (c == '\n' && !singleLine)
             {
                 sb.Append(c);

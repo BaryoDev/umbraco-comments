@@ -22,7 +22,9 @@ Put this under a post in your Razor view:
 
 It shows approved comments and the form. It loads `/App_Plugins/BaryoDev.Comments/comments.css`. The CSS reads your own custom properties first (`--ink`, `--line`, `--green`, `--radius-card`, `--font-sans` and so on) and falls back to baryo.dev values. To override only for comments, set the `--bdc-*` variables, for example `--bdc-green` and `--bdc-ink`.
 
-Behind a proxy or load balancer, enable forwarded headers so the rate limit sees the real client address.
+Behind a proxy or load balancer, enable forwarded headers so the rate limit sees the real client address. On several servers, share the ASP.NET Core Data Protection keys between them. Otherwise the antiforgery check and the form timestamp fail on a different server and visitors see an error (their text is kept). Do not output-cache the page region that holds the form.
+
+Comments are removed when their page is deleted.
 
 ## Moderate
 
@@ -50,13 +52,13 @@ Section `BaryoDev:Comments` in appsettings:
       "MaxFormAgeMinutes": 120,
       "RateLimitMaxPosts": 5,
       "RateLimitWindowMinutes": 10,
-      "PageSize": 100
+      "PageSize": 50
     }
   }
 }
 ```
 
-`MaxBodyLength` is capped at 4000, the column size. Email is stored only if given and is never shown on the page.
+`PageSize` is how many approved comments show before a "Show more comments" link. `MaxNameLength`, `MaxEmailLength` and `MaxBodyLength` are capped at the column sizes (80, 200, 4000). Email is stored only if given and is never shown on the page.
 
 ## Not in this version
 

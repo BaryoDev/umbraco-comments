@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
+using Umbraco.Cms.Core.Notifications;
 
 namespace BaryoDev.Umbraco.Comments;
 
@@ -17,5 +18,6 @@ public sealed class CommentsComposer : IComposer
         builder.Services.AddSingleton<RateLimiter>();
         builder.Services.AddSingleton<FormToken>();
         builder.Services.AddTransient<CommentSubmission>();
+        builder.AddNotificationHandler<ContentDeletedNotification, CommentsContentDeletedHandler>();
     }
 }
