@@ -14,17 +14,33 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
     public IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int take)
     {
         using var scope = scopeProvider.CreateScope(autoComplete: true);
-        return scope.Database.Fetch<CommentRow>(
+        return scope.Database.SkipTake<CommentRow>(0, take,
             "SELECT * FROM baryoComment WHERE ContentKey = @0 AND Status = @1 ORDER BY CreatedUtc ASC",
-            contentKey, (int)CommentStatus.Approved).Take(take).ToList();
+            contentKey, (int)CommentStatus.Approved);
+    }
+
+    public int CountApproved(Guid contentKey)
+    {
+        using var scope = scopeProvider.CreateScope(autoComplete: true);
+        return scope.Database.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM baryoComment WHERE ContentKey = @0 AND Status = @1",
+            contentKey, (int)CommentStatus.Approved);
+    }
+
+    public int DeleteForContent(Guid contentKey)
+    {
+        using var scope = scopeProvider.CreateScope();
+        int n = scope.Database.Execute("DELETE FROM baryoComment WHERE ContentKey = @0", contentKey);
+        scope.Complete();
+        return n;
     }
 
     public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take)
     {
         using var scope = scopeProvider.CreateScope(autoComplete: true);
-        return scope.Database.Fetch<CommentRow>(
+        return scope.Database.SkipTake<CommentRow>(skip, take,
             "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC",
-            (int)status).Skip(skip).Take(take).ToList();
+            (int)status);
     }
 
     public CommentCounts Counts()

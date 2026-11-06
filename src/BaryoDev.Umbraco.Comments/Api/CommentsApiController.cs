@@ -12,7 +12,7 @@ namespace BaryoDev.Umbraco.Comments.Api;
 
 public sealed record CommentItem(Guid Id, Guid ContentKey, string? PageName, string Name, string? Email, string Body, string Status, DateTime CreatedUtc);
 
-public sealed record CommentList(IReadOnlyList<CommentItem> Items, CommentCounts Counts);
+public sealed record CommentList(IReadOnlyList<CommentItem> Items, CommentCounts Counts, int Total);
 
 /// <summary>Moderation queue. Content section access, checked on the server.</summary>
 [ApiVersion("1.0")]
@@ -49,7 +49,9 @@ public sealed class CommentsApiController(ICommentRepository repository, IConten
             .Select(r => new CommentItem(r.Id, r.ContentKey, PageName(r.ContentKey), r.Name, r.Email, r.Body,
                 ((CommentStatus)r.Status).ToString().ToLowerInvariant(), DateTime.SpecifyKind(r.CreatedUtc, DateTimeKind.Utc)))
             .ToList();
-        return Ok(new CommentList(items, repository.Counts()));
+        var counts = repository.Counts();
+        int total = parsed switch { CommentStatus.Pending => counts.Pending, CommentStatus.Approved => counts.Approved, _ => counts.Spam };
+        return Ok(new CommentList(items, counts, total));
     }
 
     [HttpPost("{id:guid}/approve")]

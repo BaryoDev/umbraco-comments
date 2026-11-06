@@ -1,6 +1,7 @@
 // Plain custom element with no build step, same approach as the Medium import dashboard.
 const API = "/umbraco/management/api/v1/comments";
 const BASE = "/App_Plugins/BaryoDev.Comments";
+const PAGE = 50;
 const TABS = [["pending", "Pending"], ["approved", "Approved"], ["spam", "Spam"]];
 
 const Base = await import("@umbraco-cms/backoffice/element-api")
@@ -47,6 +48,7 @@ class CommentsDashboard extends Base {
   #data = null;
   #error = "";
   #busy = false;
+  #skip = 0;
 
   connectedCallback() {
     super.connectedCallback?.();
@@ -57,7 +59,7 @@ class CommentsDashboard extends Base {
     this.#busy = true;
     this.#render();
     try {
-      this.#data = await call(this, `?status=${this.#status}&take=100`);
+      this.#data = await call(this, `?status=${this.#status}&skip=${this.#skip}&take=${PAGE}`);
       this.#error = "";
     } catch (e) {
       this.#error = e.message;
@@ -74,7 +76,12 @@ class CommentsDashboard extends Base {
       await call(this, action === "delete" ? `/${id}` : `/${id}/${action}`, action === "delete" ? "DELETE" : "POST");
     } catch (e) {
       this.#error = e.message;
+      this.#busy = false;
+      this.#render();
+      return;
     }
+    const total = (this.#data?.total ?? 1) - 1;
+    if (this.#skip >= total && this.#skip > 0) this.#skip = Math.max(0, this.#skip - PAGE);
     await this.#load();
   }
 
@@ -82,6 +89,7 @@ class CommentsDashboard extends Base {
     const counts = this.#data?.counts ?? {};
     const countOf = (key) => counts[key] ?? 0;
     const items = this.#data?.items ?? [];
+    const total = this.#data?.total ?? 0;
     const when = (d) => new Date(d).toLocaleString();
     this.innerHTML = `
       <link rel="stylesheet" href="${BASE}/brand.css" />
@@ -106,9 +114,19 @@ class CommentsDashboard extends Base {
               </div>
             </div>`).join("")}
         </div>
+        <div class="bdc-actions">
+          <button class="bdc-btn" data-page="-1" ${this.#skip === 0 || this.#busy ? "disabled" : ""}>Previous</button>
+          <span class="bdc-note">${total === 0 ? 0 : this.#skip + 1} to ${Math.min(this.#skip + PAGE, total)} of ${total}</span>
+          <button class="bdc-btn" data-page="1" ${this.#skip + PAGE >= total || this.#busy ? "disabled" : ""}>Next</button>
+        </div>
       </div>`;
     this.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
       this.#status = b.dataset.tab;
+      this.#skip = 0;
+      this.#load();
+    }));
+    this.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", () => {
+      this.#skip = Math.max(0, this.#skip + Number(b.dataset.page) * PAGE);
       this.#load();
     }));
     this.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => this.#act(b.dataset.id, b.dataset.act)));
