@@ -1,0 +1,53 @@
+@model BaryoDev.Umbraco.Comments.CommentsModel
+<link rel="stylesheet" href="/App_Plugins/BaryoDev.Comments/comments.css" />
+<section class="bdc" id="comments" aria-labelledby="bdc-title">
+    <h2 class="bdc__title" id="bdc-title">Comments</h2>
+
+    @if (Model.Notice is not null)
+    {
+        <p class="bdc__notice@(Model.IsError ? " bdc__notice--error" : "")" role="status">@Model.Notice</p>
+    }
+
+    @if (Model.Comments.Count == 0)
+    {
+        <p class="bdc__empty">No comments yet.</p>
+    }
+    else
+    {
+        <ol class="bdc__list">
+            @foreach (var c in Model.Comments)
+            {
+                <li class="bdc__item">
+                    <p class="bdc__meta"><strong class="bdc__name">@c.Name</strong> <time datetime="@c.CreatedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")">@c.CreatedUtc.ToString("d MMM yyyy")</time></p>
+                    <p class="bdc__body">@c.Body</p>
+                </li>
+            }
+        </ol>
+    }
+
+    <form class="bdc__form" method="post" action="/baryo-comments/submit">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="contentKey" value="@Model.ContentKey" />
+        <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+        <input type="hidden" name="bdc_t" value="@Model.FormToken" />
+        <p class="bdc__trap" aria-hidden="true">
+            <label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off" /></label>
+        </p>
+        <h3 class="bdc__form-title">Leave a comment</h3>
+        <p class="bdc__field">
+            <label for="bdc-name">Name</label>
+            <input id="bdc-name" name="name" type="text" required maxlength="@Model.MaxNameLength" autocomplete="name" />
+        </p>
+        <p class="bdc__field">
+            <label for="bdc-email">Email@(Model.RequireEmail ? "" : " (optional)")</label>
+            <input id="bdc-email" name="email" type="email" maxlength="@Model.MaxEmailLength" autocomplete="email" required="@Model.RequireEmail" aria-describedby="bdc-email-hint" />
+            <span class="bdc__hint" id="bdc-email-hint">Never shown on the page.</span>
+        </p>
+        <p class="bdc__field">
+            <label for="bdc-body">Comment</label>
+            <textarea id="bdc-body" name="body" rows="5" required maxlength="@Model.MaxBodyLength"></textarea>
+            <span class="bdc__hint">Plain text. Comments are checked before they appear.</span>
+        </p>
+        <p><button type="submit" class="bdc__btn">Send comment</button></p>
+    </form>
+</section>

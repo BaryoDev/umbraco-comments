@@ -1,0 +1,68 @@
+/* Public comments. Reads the site's own tokens first, falls back to baryo.dev values. */
+.bdc {
+  margin: 48px 0 0;
+  font-family: var(--bdc-font, var(--font-sans, 'Plus Jakarta Sans', system-ui, sans-serif));
+  color: var(--bdc-ink, var(--ink, #1c2321));
+}
+.bdc__title { margin: 0 0 16px; font-size: 24px; letter-spacing: -0.02em; }
+.bdc__form-title { margin: 0 0 12px; font-size: 18px; }
+.bdc__empty, .bdc__hint { color: var(--bdc-ink-mute, var(--ink-mute, #6b736f)); font-size: 13px; }
+.bdc__hint { display: block; margin-top: 4px; }
+.bdc__notice {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: var(--bdc-radius, var(--radius-card, 16px));
+  background: var(--bdc-tint, var(--tint-green, rgba(11, 122, 85, 0.1)));
+  color: var(--bdc-green-deep, var(--green-deep, #075a3e));
+}
+.bdc__notice--error { background: var(--bdc-tint-warn, var(--tint-yellow, rgba(255, 205, 60, 0.35))); color: var(--bdc-ink, var(--ink, #1c2321)); }
+.bdc__list { list-style: none; margin: 0 0 32px; padding: 0; display: grid; gap: 12px; }
+.bdc__item {
+  padding: 16px 20px;
+  background: var(--bdc-paper, var(--paper, #fff));
+  border: 1px solid var(--bdc-line, var(--line, #ece4d0));
+  border-radius: var(--bdc-radius, var(--radius-card, 16px));
+}
+.bdc__meta {
+  margin: 0 0 6px;
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+  font-family: var(--bdc-mono, var(--font-mono, 'IBM Plex Mono', ui-monospace, monospace));
+  font-size: 12px;
+  color: var(--bdc-ink-mute, var(--ink-mute, #6b736f));
+}
+.bdc__name { color: var(--bdc-ink, var(--ink, #1c2321)); }
+.bdc__body { margin: 0; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bdc__form {
+  padding: 20px;
+  background: var(--bdc-paper-sand, var(--paper-sand, #fbf7ee));
+  border: 1px solid var(--bdc-line, var(--line, #ece4d0));
+  border-radius: var(--bdc-radius, var(--radius-card, 16px));
+}
+.bdc__field { margin: 0 0 14px; }
+.bdc__field label { display: block; margin-bottom: 4px; font-size: 14px; font-weight: 600; }
+.bdc__field input, .bdc__field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  color: inherit;
+  background: var(--bdc-paper, var(--paper, #fff));
+  border: 1.5px solid var(--bdc-line-strong, var(--line-strong, #d9c9a0));
+  border-radius: 10px;
+  box-sizing: border-box;
+}
+.bdc__field input:focus-visible, .bdc__field textarea:focus-visible { outline: 2px solid var(--bdc-green, var(--green, #0b7a55)); outline-offset: 1px; }
+.bdc__btn {
+  padding: 10px 20px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bdc-on-primary, var(--on-dark, #fff));
+  background: var(--bdc-green, var(--green, #0b7a55));
+  border: 1.5px solid var(--bdc-green, var(--green, #0b7a55));
+  border-radius: var(--bdc-radius-pill, var(--radius-pill, 999px));
+  cursor: pointer;
+}
+.bdc__btn:hover { background: var(--bdc-green-deep, var(--green-deep, #075a3e)); border-color: var(--bdc-green-deep, var(--green-deep, #075a3e)); }
+.bdc__trap { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
