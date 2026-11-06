@@ -1,0 +1,40 @@
+/* baryo.dev tokens, scoped to the comments dashboard. Nothing here touches the rest of the backoffice. */
+.bdc-admin {
+  --ink: #1c2321;
+  --ink-soft: #4d5552;
+  --paper-sand: #fbf7ee;
+  --line: #ece4d0;
+  --green: #0b7a55;
+  --green-deep: #075a3e;
+  --yellow: #ffcd3c;
+  --orange: #d9501f;
+  --mint: #e7f4ee;
+  color: var(--ink);
+  background: var(--paper-sand);
+  padding: 20px;
+  font-family: system-ui, sans-serif;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+.bdc-admin * { box-sizing: border-box; }
+.bdc-admin__head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.bdc-admin__head img { height: 28px; display: block; }
+.bdc-admin__head span { color: var(--ink-soft); font-size: 13px; }
+.bdc-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.bdc-tab { padding: 8px 16px; border: 1px solid var(--green); border-radius: 6px; background: #fff; color: var(--green-deep); font: inherit; font-weight: 600; cursor: pointer; }
+.bdc-tab[aria-pressed="true"] { background: var(--green); color: #fff; }
+.bdc-box { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 12px; margin-bottom: 16px; }
+.bdc-note { color: var(--ink-soft); font-size: 13px; }
+.bdc-item { border-bottom: 1px solid var(--line); padding-bottom: 12px; display: grid; gap: 6px; }
+.bdc-item:last-child { border-bottom: 0; padding-bottom: 0; }
+.bdc-item__meta { font-size: 13px; color: var(--ink-soft); }
+.bdc-item__body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bdc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bdc-btn { padding: 6px 14px; border: 1px solid var(--green); border-radius: 6px; background: #fff; color: var(--green-deep); font: inherit; font-weight: 600; cursor: pointer; }
+.bdc-btn.primary { background: var(--green); color: #fff; }
+.bdc-btn.primary:hover:not(:disabled) { background: var(--green-deep); }
+.bdc-btn.danger { border-color: var(--orange); color: var(--orange); }
+.bdc-btn:disabled { opacity: .5; cursor: default; }
+.bdc-err { padding: 8px 12px; background: #fdeae4; border: 1px solid var(--orange); border-radius: 6px; }
+.bdc-count { display: inline-block; padding: 0 8px; margin-left: 4px; border-radius: 10px; font-size: 12px; background: var(--mint); color: var(--green-deep); }
+.bdc-tab[aria-pressed="true"] .bdc-count { background: #fff; }

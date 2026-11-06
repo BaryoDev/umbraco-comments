@@ -1,0 +1,21 @@
+{
+  "$schema": "https://marketplace.umbraco.com/umbraco-marketplace-schema.json",
+  "PackageType": "Package",
+  "Category": "Content",
+  "Description": "Moderated comments for Umbraco 17. Visitors send a name, an optional email and a plain-text comment. Comments wait for approval by default, and only approved ones show. Drop one view component under a post. It works without JavaScript. A honeypot, a minimum time on the form, a per-IP rate limit and length limits keep spam down. Editors approve, mark spam or delete from a dashboard in the Content section. Free and MIT licensed.",
+  "AuthorDetails": {
+    "Name": "BaryoDev",
+    "Description": "Small open source .NET and JavaScript packages.",
+    "Url": "https://github.com/BaryoDev",
+    "ImageUrl": "https://raw.githubusercontent.com/BaryoDev/BaryoDev.Umbraco.Comments/main/icon.png"
+  },
+  "DocumentationUrl": "https://github.com/BaryoDev/BaryoDev.Umbraco.Comments#readme",
+  "IssueTrackerUrl": "https://github.com/BaryoDev/BaryoDev.Umbraco.Comments/issues",
+  "LicenseTypes": [ "Free" ],
+  "Tags": [
+    "comments",
+    "moderation",
+    "blog",
+    "spam"
+  ]
+}
