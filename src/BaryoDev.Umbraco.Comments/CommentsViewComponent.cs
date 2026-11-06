@@ -11,6 +11,11 @@ public sealed record CommentsModel(
     Guid ContentKey,
     string ReturnUrl,
     IReadOnlyList<CommentView> Comments,
+    int Total,
+    string? MoreUrl,
+    string DraftName,
+    string DraftEmail,
+    string DraftBody,
     string FormToken,
     string? Notice,
     bool IsError,
@@ -35,23 +40,35 @@ public sealed class CommentsViewComponent(ICommentRepository repository, FormTok
         ["error-emailrequired"] = "Add an email address.",
         ["error-emailinvalid"] = "That email address does not look right.",
         ["error-bodyinvalid"] = "The comment is too short or too long.",
+        ["error-antiforgery"] = "The form expired. Your text is still here, send it again.",
         ["error-nosuchpage"] = "This page can not take comments.",
     };
 
     public IViewComponentResult Invoke(Guid contentKey)
     {
         CommentsOptions o = options.Value;
-        var comments = repository.ListApproved(contentKey, o.PageSize)
+        int pages = int.TryParse(Request.Query["bdcp"].FirstOrDefault(), out int p) ? Math.Clamp(p, 1, 1000) : 1;
+        int pageSize = Math.Clamp(o.PageSize, 1, 500);
+        var comments = repository.ListApproved(contentKey, pageSize * pages)
             .Select(r => new CommentView(r.Name, r.CreatedUtc, r.Body))
             .ToList();
 
         string? code = Request.Query["bdc"].FirstOrDefault();
         string? notice = code is not null && Messages.TryGetValue(code, out var m) ? m : null;
 
-        string returnUrl = Request.Path.Value ?? "/";
+        int total = repository.CountApproved(contentKey);
+        string path = Request.PathBase + Request.Path;
+        string? more = total > comments.Count ? $"{path}?bdcp={pages + 1}#comments" : null;
+
+        bool failed = code?.StartsWith("error-", StringComparison.Ordinal) == true;
+        string Draft(string key) => failed && TempData[key] is string s ? s : string.Empty;
+
+        string returnUrl = path;
         return View(new CommentsModel(
-            contentKey, returnUrl, comments, tokens.Issue(), notice,
-            code?.StartsWith("error-", StringComparison.Ordinal) == true,
-            o.RequireEmail, o.MaxNameLength, o.MaxEmailLength, Math.Min(o.MaxBodyLength, CommentsOptions.HardBodyLimit)));
+            contentKey, returnUrl, comments, total, more,
+            Draft(CommentsController.DraftName), Draft(CommentsController.DraftEmail), Draft(CommentsController.DraftBody),
+            tokens.Issue(), notice, failed,
+            o.RequireEmail, Math.Min(o.MaxNameLength, CommentsOptions.HardNameLimit), Math.Min(o.MaxEmailLength, CommentsOptions.HardEmailLimit),
+            Math.Min(o.MaxBodyLength, CommentsOptions.HardBodyLimit)));
     }
 }

@@ -1,5 +1,5 @@
 @model BaryoDev.Umbraco.Comments.CommentsModel
-<link rel="stylesheet" href="/App_Plugins/BaryoDev.Comments/comments.css" />
+<link rel="stylesheet" href="@Url.Content("~/App_Plugins/BaryoDev.Comments/comments.css")" />
 <section class="bdc" id="comments" aria-labelledby="bdc-title">
     <h2 class="bdc__title" id="bdc-title">Comments</h2>
 
@@ -23,9 +23,13 @@
                 </li>
             }
         </ol>
+        @if (Model.MoreUrl is not null)
+        {
+            <p class="bdc__more"><a href="@Model.MoreUrl">Show more comments</a></p>
+        }
     }
 
-    <form class="bdc__form" method="post" action="/baryo-comments/submit">
+    <form class="bdc__form" method="post" action="@Url.Content("~/baryo-comments/submit")">
         @Html.AntiForgeryToken()
         <input type="hidden" name="contentKey" value="@Model.ContentKey" />
         <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
@@ -36,16 +40,16 @@
         <h3 class="bdc__form-title">Leave a comment</h3>
         <p class="bdc__field">
             <label for="bdc-name">Name</label>
-            <input id="bdc-name" name="name" type="text" required maxlength="@Model.MaxNameLength" autocomplete="name" />
+            <input id="bdc-name" name="name" type="text" required maxlength="@Model.MaxNameLength" autocomplete="name" value="@Model.DraftName" />
         </p>
         <p class="bdc__field">
             <label for="bdc-email">Email@(Model.RequireEmail ? "" : " (optional)")</label>
-            <input id="bdc-email" name="email" type="email" maxlength="@Model.MaxEmailLength" autocomplete="email" required="@Model.RequireEmail" aria-describedby="bdc-email-hint" />
+            <input id="bdc-email" name="email" type="email" maxlength="@Model.MaxEmailLength" autocomplete="email" required="@Model.RequireEmail" aria-describedby="bdc-email-hint" value="@Model.DraftEmail" />
             <span class="bdc__hint" id="bdc-email-hint">Never shown on the page.</span>
         </p>
         <p class="bdc__field">
             <label for="bdc-body">Comment</label>
-            <textarea id="bdc-body" name="body" rows="5" required maxlength="@Model.MaxBodyLength"></textarea>
+            <textarea id="bdc-body" name="body" rows="5" required maxlength="@Model.MaxBodyLength">@Model.DraftBody</textarea>
             <span class="bdc__hint">Plain text. Comments are checked before they appear.</span>
         </p>
         <p><button type="submit" class="bdc__btn">Send comment</button></p>
