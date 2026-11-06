@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BaryoDev.Umbraco.Comments/BaryoDev.Umbraco.Comments.csproj" />
+  </Folder>
+</Solution>
