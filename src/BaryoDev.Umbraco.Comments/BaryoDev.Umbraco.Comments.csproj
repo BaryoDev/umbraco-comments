@@ -21,6 +21,10 @@
     <PackageReference Include="Umbraco.Cms.Api.Management" Version="[17.8.1,18.0.0)" />
   </ItemGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="BaryoDev.Umbraco.Comments.Tests" />
+    <InternalsVisibleTo Include="BaryoDev.Umbraco.Comments.IntegrationTests" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
     <None Include="../../icon.png" Pack="true" PackagePath="/" />
   </ItemGroup>
