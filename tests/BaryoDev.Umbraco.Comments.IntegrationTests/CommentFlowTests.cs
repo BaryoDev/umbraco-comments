@@ -201,6 +201,25 @@ public class CommentFlowTests : UmbracoIntegrationTest
     }
 
     [Test]
+    public void Equal_timestamps_order_by_id_so_pages_do_not_repeat()
+    {
+        var key = Guid.NewGuid();
+        var ids = new[] { 1, 2, 3 }.Select(n => new Guid($"00000000-0000-0000-0000-00000000000{n}")).ToArray();
+        foreach (Guid id in ids.Reverse())
+        {
+            var row = Row(key, CommentStatus.Approved, 5, "same");
+            row.Id = id;
+            Comments.Add(row);
+        }
+
+        var approved = Enumerable.Range(0, 3).Select(i => Comments.ListApproved(key, i, 1).Single().Id);
+        Assert.That(approved, Is.EqualTo(ids));
+
+        var moderation = Enumerable.Range(0, 3).Select(i => Comments.List(CommentStatus.Approved, i, 1).Single().Id);
+        Assert.That(moderation, Is.EqualTo(ids.Reverse()));
+    }
+
+    [Test]
     public void Migration_runs_twice_without_error()
     {
         Assert.That(TableExists(), Is.True);

@@ -15,7 +15,7 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
     {
         using var scope = scopeProvider.CreateScope(autoComplete: true);
         return scope.Database.SkipTake<CommentRow>(skip, take,
-            "SELECT * FROM baryoComment WHERE ContentKey = @0 AND Status = @1 ORDER BY CreatedUtc ASC",
+            "SELECT * FROM baryoComment WHERE ContentKey = @0 AND Status = @1 ORDER BY CreatedUtc ASC, Id ASC",
             contentKey, (int)CommentStatus.Approved);
     }
 
@@ -39,7 +39,7 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
     {
         using var scope = scopeProvider.CreateScope(autoComplete: true);
         return scope.Database.SkipTake<CommentRow>(skip, take,
-            "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC",
+            "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC, Id DESC",
             (int)status);
     }
 
