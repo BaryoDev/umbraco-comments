@@ -5,6 +5,7 @@ using BaryoDev.Umbraco.Comments.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
+using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Services;
 
 namespace BaryoDev.Umbraco.Comments.Tests;
@@ -15,6 +16,19 @@ public class SubmissionTests
     public class ContentProxy : DispatchProxy
     {
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
+    }
+
+    /// <summary>IContentService whose lookup returns a published page.</summary>
+    public class PublishedContentProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
+            targetMethod!.Name == "GetById" ? DispatchProxy.Create<IContent, PublishedPageProxy>() : null;
+    }
+
+    public class PublishedPageProxy : DispatchProxy
+    {
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
+            targetMethod!.Name == "get_Published" ? true : null;
     }
 
     private sealed class RecordingRepository : ICommentRepository
@@ -47,14 +61,14 @@ public class SubmissionTests
         public CommentSubmission Submission { get; }
         public RecordingRepository Repository { get; } = new();
 
-        public Rig(CommentsOptions options)
+        public Rig(CommentsOptions options, bool pagePublished = false)
         {
             Tokens = new FormToken(new EphemeralDataProtectionProvider(), Time);
             Submission = new CommentSubmission(
                 Repository,
                 new RateLimiter(Time),
                 Tokens,
-                DispatchProxy.Create<IContentService, ContentProxy>(),
+                pagePublished ? DispatchProxy.Create<IContentService, PublishedContentProxy>() : DispatchProxy.Create<IContentService, ContentProxy>(),
                 Options.Create(options),
                 Time);
         }
@@ -92,6 +106,67 @@ public class SubmissionTests
         var rig = new Rig(new CommentsOptions());
         Assert.Equal(SubmitResult.NameRequired, rig.Send(name: zeroWidth));
         Assert.Equal(SubmitResult.BodyInvalid, rig.Send(body: zeroWidth));
+    }
+
+    [Fact]
+    public void Posts_over_the_limit_are_rate_limited_per_client()
+    {
+        var rig = new Rig(new CommentsOptions { RateLimitMaxPosts = 2 });
+
+        Assert.Equal(SubmitResult.NoSuchPage, rig.Send(client: "1.1.1.1"));
+        Assert.Equal(SubmitResult.NoSuchPage, rig.Send(client: "1.1.1.1"));
+        Assert.Equal(SubmitResult.RateLimited, rig.Send(client: "1.1.1.1"));
+        Assert.Equal(SubmitResult.NoSuchPage, rig.Send(client: "2.2.2.2"));
+    }
+
+    [Fact]
+    public void A_tampered_token_is_invalid()
+    {
+        var rig = new Rig(new CommentsOptions());
+        var input = new CommentInput(Guid.NewGuid(), "Ana", null, "Hello there", null, "not-a-token", "1.1.1.1");
+
+        Assert.Equal(SubmitResult.Invalid, rig.Submission.Submit(input));
+        Assert.Equal(SubmitResult.Invalid, rig.Submission.Submit(input with { Token = null }));
+    }
+
+    [Fact]
+    public void An_old_token_is_expired()
+    {
+        var rig = new Rig(new CommentsOptions { MaxFormAgeMinutes = 10 });
+
+        Assert.Equal(SubmitResult.Expired, rig.Send(waitSeconds: 10 * 60 + 60));
+        Assert.Equal(SubmitResult.NoSuchPage, rig.Send(waitSeconds: 9 * 60));
+    }
+
+    [Fact]
+    public void Email_is_required_only_when_configured()
+    {
+        Assert.Equal(SubmitResult.EmailRequired, new Rig(new CommentsOptions { RequireEmail = true }).Send(email: null));
+        Assert.Equal(SubmitResult.NoSuchPage, new Rig(new CommentsOptions { RequireEmail = true }).Send(email: "ana@example.com"));
+        Assert.Equal(SubmitResult.NoSuchPage, new Rig(new CommentsOptions()).Send(email: null));
+    }
+
+    [Fact]
+    public void Body_length_is_bounded()
+    {
+        var rig = new Rig(new CommentsOptions { RateLimitMaxPosts = 100 });
+
+        Assert.Equal(SubmitResult.BodyInvalid, rig.Send(body: "a"));
+        Assert.Equal(SubmitResult.NoSuchPage, rig.Send(body: "ab"));
+        Assert.Equal(SubmitResult.NoSuchPage, rig.Send(body: new string('a', 2000)));
+        Assert.Equal(SubmitResult.BodyInvalid, rig.Send(body: new string('a', 2001)));
+    }
+
+    [Fact]
+    public void A_published_page_stores_the_comment_as_pending_or_approved()
+    {
+        var pending = new Rig(new CommentsOptions(), pagePublished: true);
+        Assert.Equal(SubmitResult.Pending, pending.Send());
+        Assert.Equal((int)CommentStatus.Pending, pending.Repository.Added.Single().Status);
+
+        var approved = new Rig(new CommentsOptions { AutoApprove = true }, pagePublished: true);
+        Assert.Equal(SubmitResult.Approved, approved.Send());
+        Assert.Equal((int)CommentStatus.Approved, approved.Repository.Added.Single().Status);
     }
 
     [Fact]
