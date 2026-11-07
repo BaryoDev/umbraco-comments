@@ -112,7 +112,7 @@ public class CommentFlowTests : UmbracoIntegrationTest
     [Test]
     public void Moderation_api_requires_content_section_access()
     {
-        var authorize = typeof(CommentsApiController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single();
+        var authorize = typeof(CommentsApiController).GetCustomAttributes(typeof(AuthorizeAttribute), inherit: false).Cast<AuthorizeAttribute>().Single();
         Assert.That(authorize.Policy, Is.EqualTo(AuthorizationPolicies.SectionAccessContent));
     }
 
