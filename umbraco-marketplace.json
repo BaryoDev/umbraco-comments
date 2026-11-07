@@ -9,8 +9,8 @@
     "Url": "https://github.com/BaryoDev",
     "ImageUrl": "https://raw.githubusercontent.com/BaryoDev/BaryoDev.Umbraco.Comments/main/icon.png"
   },
-  "DocumentationUrl": "https://github.com/BaryoDev/BaryoDev.Umbraco.Comments#readme",
-  "IssueTrackerUrl": "https://github.com/BaryoDev/BaryoDev.Umbraco.Comments/issues",
+  "DocumentationUrl": "https://github.com/BaryoDev/umbraco-comments#readme",
+  "IssueTrackerUrl": "https://github.com/BaryoDev/umbraco-comments/issues",
   "LicenseTypes": [ "Free" ],
   "Tags": [
     "comments",
