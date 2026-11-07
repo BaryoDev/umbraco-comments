@@ -51,6 +51,12 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
         return new CommentCounts(Count(CommentStatus.Pending), Count(CommentStatus.Approved), Count(CommentStatus.Spam));
     }
 
+    public CommentRow? Get(Guid id)
+    {
+        using var scope = scopeProvider.CreateScope(autoComplete: true);
+        return scope.Database.FirstOrDefault<CommentRow>("SELECT * FROM baryoComment WHERE Id = @0", id);
+    }
+
     public bool SetStatus(Guid id, CommentStatus status)
     {
         using var scope = scopeProvider.CreateScope();

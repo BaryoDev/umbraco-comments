@@ -10,6 +10,7 @@ public interface ICommentRepository
     int DeleteForContent(Guid contentKey);
     IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take);
     CommentCounts Counts();
+    CommentRow? Get(Guid id);
     bool SetStatus(Guid id, CommentStatus status);
     bool Delete(Guid id);
 }

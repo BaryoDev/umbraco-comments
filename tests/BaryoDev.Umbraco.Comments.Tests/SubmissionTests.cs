@@ -33,6 +33,8 @@ public class SubmissionTests
 
         public CommentCounts Counts() => new(0, 0, 0);
 
+        public CommentRow? Get(Guid id) => null;
+
         public bool SetStatus(Guid id, CommentStatus status) => false;
 
         public bool Delete(Guid id) => false;

@@ -1,6 +1,8 @@
+using BaryoDev.Umbraco.Comments.Api;
 using BaryoDev.Umbraco.Comments.Data;
 using BaryoDev.Umbraco.Comments.Services;
 using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.DataProtection;
@@ -15,6 +17,10 @@ using NUnit.Framework;
 using Umbraco.Cms.Core;
 using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Core.Migrations;
+using Umbraco.Cms.Core.Models.Membership;
+using Umbraco.Cms.Core.Security;
+using Umbraco.Cms.Core.Services.AuthorizationStatus;
+using Umbraco.Cms.Web.Common.Authorization;
 using Umbraco.Cms.Core.Models;
 using Umbraco.Cms.Core.Notifications;
 using Umbraco.Cms.Core.Packaging;
@@ -83,6 +89,115 @@ public class CommentFlowTests : UmbracoIntegrationTest
         var published = content.Publish(page, ["*"]);
         Assert.That(published.Success, Is.True, "publish: " + published.Result);
         return page.Key;
+    }
+
+    private CommentsApiController Moderation(IUser? user, Func<object?[], object?>? permission = null)
+    {
+        var security = Stub.Make<IBackOfficeSecurity>(("get_CurrentUser", _ => user));
+        var permissions = Stub.Make<IContentPermissionService>(("AuthorizeAccessAsync",
+            permission ?? (_ => Task.FromResult(ContentAuthorizationStatus.UnauthorizedMissingPermissionAccess))));
+        return ActivatorUtilities.CreateInstance<CommentsApiController>(Services, new FixedAccessor(security), permissions);
+    }
+
+    private CommentsApiController Admin() =>
+        Moderation(GetRequiredService<IUserService>().GetAsync(Constants.Security.SuperUserKey).GetAwaiter().GetResult());
+
+    // A signed-in user in no group, so only the Browse check can let them in.
+    private CommentsApiController Restricted(params Guid[] browsable) =>
+        Moderation(Stub.Make<IUser>(), a => Task.FromResult(
+            browsable.Contains((Guid)a[1]!) ? ContentAuthorizationStatus.Success : ContentAuthorizationStatus.UnauthorizedMissingPermissionAccess));
+
+    private static List<CommentItem> Items(IActionResult result) => ((CommentList)((OkObjectResult)result).Value!).Items.ToList();
+
+    [Test]
+    public void Moderation_api_requires_content_section_access()
+    {
+        var authorize = typeof(CommentsApiController).GetCustomAttributes(typeof(AuthorizeAttribute), true).Cast<AuthorizeAttribute>().Single();
+        Assert.That(authorize.Policy, Is.EqualTo(AuthorizationPolicies.SectionAccessContent));
+    }
+
+    [Test]
+    public async Task Moderation_list_rejects_a_bad_status_and_clamps_take()
+    {
+        var key = Guid.NewGuid();
+        for (int i = 0; i < 205; i++)
+        {
+            Comments.Add(Row(key, CommentStatus.Pending, i % 60, "c" + i));
+        }
+        CommentsApiController api = Admin();
+
+        Assert.That(await api.List(status: "bogus"), Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(Items(await api.List(take: 99999)), Has.Count.EqualTo(200));
+    }
+
+    [Test]
+    public async Task Moderation_actions_on_an_unknown_id_are_404()
+    {
+        CommentsApiController api = Admin();
+
+        Assert.That(await api.Approve(Guid.NewGuid()), Is.InstanceOf<NotFoundResult>());
+        Assert.That(await api.Spam(Guid.NewGuid()), Is.InstanceOf<NotFoundResult>());
+        Assert.That(await api.Delete(Guid.NewGuid()), Is.InstanceOf<NotFoundResult>());
+    }
+
+    [Test]
+    public async Task Moderation_actions_work_for_an_administrator()
+    {
+        var key = PublishPage();
+        var row = Row(key, CommentStatus.Pending, 1);
+        Comments.Add(row);
+        CommentsApiController api = Admin();
+
+        Assert.That(await api.Approve(row.Id), Is.InstanceOf<NoContentResult>());
+        Assert.That(Comments.Get(row.Id)!.Status, Is.EqualTo((int)CommentStatus.Approved));
+        Assert.That(await api.Delete(row.Id), Is.InstanceOf<NoContentResult>());
+        Assert.That(Comments.Get(row.Id), Is.Null);
+    }
+
+    [Test]
+    public async Task A_user_without_Browse_does_not_see_or_change_comments()
+    {
+        var open = PublishPage();
+        var shut = Guid.NewGuid();
+        var seen = Row(open, CommentStatus.Pending, 1, "seen");
+        var hidden = Row(shut, CommentStatus.Pending, 2, "hidden");
+        hidden.Email = "private@example.com";
+        Comments.Add(seen);
+        Comments.Add(hidden);
+        CommentsApiController api = Restricted(open);
+
+        var list = Items(await api.List());
+        Assert.That(list.Select(i => i.Name), Is.EqualTo(new[] { "seen" }));
+
+        Assert.That(await api.Approve(hidden.Id), Is.InstanceOf<ForbidResult>());
+        Assert.That(await api.Spam(hidden.Id), Is.InstanceOf<ForbidResult>());
+        Assert.That(await api.Delete(hidden.Id), Is.InstanceOf<ForbidResult>());
+        Assert.That(Comments.Get(hidden.Id)!.Status, Is.EqualTo((int)CommentStatus.Pending));
+
+        Assert.That(await api.Approve(seen.Id), Is.InstanceOf<NoContentResult>());
+    }
+
+    [Test]
+    public async Task Only_administrators_see_comments_whose_page_is_gone()
+    {
+        var gone = Row(Guid.NewGuid(), CommentStatus.Pending, 1, "orphan");
+        Comments.Add(gone);
+
+        Assert.That(Items(await Admin().List()).Select(i => i.Name), Is.EqualTo(new[] { "orphan" }));
+        Assert.That(Items(await Restricted().List()), Is.Empty);
+    }
+
+    [Test]
+    public async Task Moderation_fails_closed_without_a_user()
+    {
+        var row = Row(Guid.NewGuid(), CommentStatus.Pending, 1);
+        Comments.Add(row);
+        CommentsApiController api = Moderation(null, _ => Task.FromResult(ContentAuthorizationStatus.Success));
+
+        Assert.That(Items(await api.List()), Is.Empty);
+        Assert.That(await api.Approve(row.Id), Is.InstanceOf<ForbidResult>());
+        Assert.That(await api.Delete(row.Id), Is.InstanceOf<ForbidResult>());
+        Assert.That(Comments.Get(row.Id), Is.Not.Null);
     }
 
     [Test]
