@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Mail;
 using BaryoDev.Umbraco.Comments.Data;
 using Microsoft.Extensions.Options;
@@ -105,6 +106,12 @@ public sealed class CommentSubmission(
         foreach (char c in value.Replace("\r\n", "\n").Replace('\r', '\n'))
         {
             if (c is '\u200B' or '\u2060' or '\uFEFF')
+            {
+                continue;
+            }
+            // Bidi overrides and other format characters in a name or email would reorder the text around it.
+            // Bodies keep them, since emoji sequences need the joiner.
+            if (singleLine && char.GetUnicodeCategory(c) is UnicodeCategory.Format or UnicodeCategory.LineSeparator or UnicodeCategory.ParagraphSeparator)
             {
                 continue;
             }

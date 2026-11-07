@@ -44,7 +44,7 @@ public sealed class CommentsController(CommentSubmission submission, IAntiforger
         {
             TempData[DraftName] = Cut(name, CommentsOptions.HardNameLimit);
             TempData[DraftEmail] = Cut(email, CommentsOptions.HardEmailLimit);
-            TempData[DraftBody] = Cut(body, 1500);
+            TempData[DraftBody] = Cut(body, CommentsOptions.HardBodyLimit);
         }
 
         string target = !string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) ? returnUrl : "/";
@@ -53,7 +53,19 @@ public sealed class CommentsController(CommentSubmission submission, IAntiforger
         return LocalRedirect($"{path}?bdc={code}#comments");
     }
 
-    private static string Cut(string? value, int max) => value is null ? string.Empty : value.Length <= max ? value : value[..max];
+    /// <summary>Cuts to max chars without splitting a surrogate pair.</summary>
+    internal static string Cut(string? value, int max)
+    {
+        if (value is null)
+        {
+            return string.Empty;
+        }
+        if (value.Length <= max)
+        {
+            return value;
+        }
+        return char.IsHighSurrogate(value[max - 1]) ? value[..(max - 1)] : value[..max];
+    }
 
     /// <summary>IPv4 as is, IPv6 reduced to its /64 so a client rotating inside a prefix shares one bucket.</summary>
     internal static string ClientKey(IPAddress? address)

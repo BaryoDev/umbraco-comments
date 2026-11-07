@@ -170,6 +170,29 @@ public class SubmissionTests
     }
 
     [Fact]
+    public void Bidi_overrides_are_dropped_from_names_but_kept_in_bodies()
+    {
+        Assert.Equal("evil", CommentSubmission.Clean("\u202Eevil\u2066", singleLine: true));
+        Assert.Equal("a\u2028b", CommentSubmission.Clean("a\u2028b", singleLine: false));
+        Assert.Equal("\U0001F468\u200D\U0001F469", CommentSubmission.Clean("\U0001F468\u200D\U0001F469", singleLine: false));
+
+        var rig = new Rig(new CommentsOptions());
+        Assert.Equal(SubmitResult.NameRequired, rig.Send(name: "\u202E\u202D"));
+    }
+
+    [Fact]
+    public void Draft_cut_keeps_a_long_body_and_does_not_split_a_surrogate_pair()
+    {
+        string body = new string('a', 2000);
+        Assert.Equal(body, CommentsController.Cut(body, CommentsOptions.HardBodyLimit));
+
+        string pair = new string('a', 9) + "\U0001F600";
+        Assert.Equal(new string('a', 9), CommentsController.Cut(pair, 10));
+        Assert.Equal(pair, CommentsController.Cut(pair, 11));
+        Assert.Equal(string.Empty, CommentsController.Cut(null, 10));
+    }
+
+    [Fact]
     public void Name_limit_is_clamped_to_80_and_email_to_200()
     {
         var rig = new Rig(new CommentsOptions { MaxNameLength = 500, MaxEmailLength = 500, RateLimitMaxPosts = 100 });
