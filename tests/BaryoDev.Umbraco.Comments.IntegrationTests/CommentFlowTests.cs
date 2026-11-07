@@ -51,12 +51,7 @@ public class CommentFlowTests : UmbracoIntegrationTest
         var runner = Services.GetRequiredService<PackageMigrationRunner>();
         await runner.RunPackageMigrationsIfPendingAsync("BaryoDev.Umbraco.Comments");
 
-        // The runner skips when key-value state says the plan ran; run it directly if the table is absent.
-        if (!TableExists())
-        {
-            var executor = Services.GetRequiredService<IMigrationPlanExecutor>();
-            await executor.ExecutePlanAsync(new CommentsMigrationPlan(), string.Empty);
-        }
+        Assert.That(TableExists(), Is.True);
     }
 
     private bool TableExists()
