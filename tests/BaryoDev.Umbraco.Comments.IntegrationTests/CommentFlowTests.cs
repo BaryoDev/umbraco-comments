@@ -300,16 +300,21 @@ public class CommentFlowTests : UmbracoIntegrationTest
         Assert.That(second.Select(r => r.Name), Is.EqualTo(new[] { "c3", "c4" }));
     }
 
-    [TestCase(5, 2, "99", 3, 4)]
-    [TestCase(5, 2, "0", 1, 0)]
-    [TestCase(5, 2, "abc", 1, 0)]
-    [TestCase(5, 0, "2", 2, 1)]
-    [TestCase(5, 9999, "1", 1, 0)]
-    public void Window_clamps_page_and_page_size(int total, int configured, string query, int page, int skip)
+    [TestCase(5, 2, "99", 3, 4, 2, 3)]
+    [TestCase(5, 2, "0", 1, 0, 2, 3)]
+    [TestCase(5, 2, "abc", 1, 0, 2, 3)]
+    [TestCase(5, 2, "-3", 1, 0, 2, 3)]
+    [TestCase(0, 2, "5", 1, 0, 2, 1)]
+    [TestCase(5, 0, "2", 2, 1, 1, 5)]
+    [TestCase(5, 9999, "1", 1, 0, 500, 1)]
+    [TestCase(1200, 9999, "3", 3, 1000, 500, 3)]
+    public void Window_clamps_page_and_page_size(int total, int configured, string query, int page, int skip, int pageSize, int pageCount)
     {
         var w = CommentsViewComponent.Window(total, configured, query);
         Assert.That(w.Page, Is.EqualTo(page));
         Assert.That(w.Skip, Is.EqualTo(skip));
+        Assert.That(w.PageSize, Is.EqualTo(pageSize));
+        Assert.That(w.PageCount, Is.EqualTo(pageCount));
     }
 
     [Test]
