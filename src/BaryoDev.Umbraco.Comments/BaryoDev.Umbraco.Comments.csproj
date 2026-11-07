@@ -6,8 +6,8 @@
     <Description>Moderated comments for Umbraco 17. Plain text, pending by default, works without JavaScript, with a backoffice queue to approve, mark spam or delete.</Description>
     <PackageTags>umbraco umbraco-marketplace comments moderation blog</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <PackageProjectUrl>https://github.com/BaryoDev/BaryoDev.Umbraco.Comments</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/BaryoDev/BaryoDev.Umbraco.Comments</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/BaryoDev/umbraco-comments</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/BaryoDev/umbraco-comments</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>icon.png</PackageIcon>
@@ -19,6 +19,10 @@
   <ItemGroup>
     <PackageReference Include="Umbraco.Cms.Web.Common" Version="[17.8.1,18.0.0)" />
     <PackageReference Include="Umbraco.Cms.Api.Management" Version="[17.8.1,18.0.0)" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="BaryoDev.Umbraco.Comments.Tests" />
+    <InternalsVisibleTo Include="BaryoDev.Umbraco.Comments.IntegrationTests" />
   </ItemGroup>
   <ItemGroup>
     <None Include="../../README.md" Pack="true" PackagePath="/" />
