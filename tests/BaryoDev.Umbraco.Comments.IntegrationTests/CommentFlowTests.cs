@@ -3,7 +3,9 @@ using BaryoDev.Umbraco.Comments.Services;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
@@ -93,15 +95,45 @@ public class CommentFlowTests : UmbracoIntegrationTest
         Assert.That(TableExists(), Is.True);
     }
 
+    private SubmitResult SubmitComment(Guid pageKey, bool autoApprove)
+    {
+        var options = new CommentsOptions { AutoApprove = autoApprove, MinSecondsOnForm = 0 };
+        var tokens = new FormToken(GetRequiredService<IDataProtectionProvider>(), TimeProvider.System);
+        var submission = new CommentSubmission(
+            Comments,
+            new RateLimiter(TimeProvider.System),
+            tokens,
+            GetRequiredService<IContentService>(),
+            Options.Create(options),
+            TimeProvider.System);
+        return submission.Submit(new CommentInput(pageKey, "Ana", null, "A real comment", null, tokens.Issue(), "1.1.1.1"));
+    }
+
     [Test]
     public void New_comment_is_pending_and_not_listed()
     {
-        var key = Guid.NewGuid();
-        Comments.Add(Row(key, CommentStatus.Pending, 0));
+        var key = PublishPage();
+
+        Assert.That(SubmitComment(key, autoApprove: false), Is.EqualTo(SubmitResult.Pending));
 
         Assert.That(Comments.ListApproved(key, 0, 10), Is.Empty);
         Assert.That(Comments.CountApproved(key), Is.EqualTo(0));
-        Assert.That(Comments.Counts().Pending, Is.EqualTo(1));
+        var stored = Comments.List(CommentStatus.Pending, 0, 10);
+        Assert.That(stored, Has.Count.EqualTo(1));
+        Assert.That(stored[0].ContentKey, Is.EqualTo(key));
+        Assert.That(stored[0].Status, Is.EqualTo((int)CommentStatus.Pending));
+    }
+
+    [Test]
+    public void Auto_approve_lists_the_comment_at_once()
+    {
+        var key = PublishPage();
+
+        Assert.That(SubmitComment(key, autoApprove: true), Is.EqualTo(SubmitResult.Approved));
+
+        var listed = Comments.ListApproved(key, 0, 10);
+        Assert.That(listed, Has.Count.EqualTo(1));
+        Assert.That(listed[0].Body, Is.EqualTo("A real comment"));
     }
 
     [Test]
@@ -127,10 +159,23 @@ public class CommentFlowTests : UmbracoIntegrationTest
             Comments.Add(Row(key, CommentStatus.Approved, i, "c" + i));
         }
 
-        const int pageSize = 2;
-        var second = Comments.ListApproved(key, (2 - 1) * pageSize, pageSize);
+        var (page, pageSize, _, skip) = CommentsViewComponent.Window(Comments.CountApproved(key), 2, "2");
+        Assert.That(page, Is.EqualTo(2));
+        var second = Comments.ListApproved(key, skip, pageSize);
 
         Assert.That(second.Select(r => r.Name), Is.EqualTo(new[] { "c3", "c4" }));
+    }
+
+    [TestCase(5, 2, "99", 3, 4)]
+    [TestCase(5, 2, "0", 1, 0)]
+    [TestCase(5, 2, "abc", 1, 0)]
+    [TestCase(5, 0, "2", 2, 1)]
+    [TestCase(5, 9999, "1", 1, 0)]
+    public void Window_clamps_page_and_page_size(int total, int configured, string query, int page, int skip)
+    {
+        var w = CommentsViewComponent.Window(total, configured, query);
+        Assert.That(w.Page, Is.EqualTo(page));
+        Assert.That(w.Skip, Is.EqualTo(skip));
     }
 
     [Test]
@@ -153,7 +198,8 @@ public class CommentFlowTests : UmbracoIntegrationTest
         var http = new DefaultHttpContext();
         var controller = new CommentsController(null!, new FailingAntiforgery())
         {
-            ControllerContext = new ControllerContext(new ActionContext(http, new RouteData(), new ActionDescriptor())),
+            ControllerContext = new ControllerContext(new ActionContext(
+                http, new RouteData(), new ControllerActionDescriptor { ControllerName = "Comments", ActionName = "Submit" })),
             TempData = new TempDataDictionary(http, new NoTempDataProvider()),
             Url = new LocalOnlyUrlHelper(),
         };

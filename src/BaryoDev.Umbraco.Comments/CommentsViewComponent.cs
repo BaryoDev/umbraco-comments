@@ -45,14 +45,21 @@ public sealed class CommentsViewComponent(ICommentRepository repository, FormTok
         ["error-nosuchpage"] = "This page can not take comments.",
     };
 
+    /// <summary>Clamps the configured page size and the requested page, and returns the rows to skip.</summary>
+    internal static (int Page, int PageSize, int PageCount, int Skip) Window(int total, int configuredPageSize, string? pageQuery)
+    {
+        int pageSize = Math.Clamp(configuredPageSize, 1, 500);
+        int pageCount = Math.Max(1, (total + pageSize - 1) / pageSize);
+        int page = int.TryParse(pageQuery, out int p) ? Math.Clamp(p, 1, pageCount) : 1;
+        return (page, pageSize, pageCount, (page - 1) * pageSize);
+    }
+
     public IViewComponentResult Invoke(Guid contentKey)
     {
         CommentsOptions o = options.Value;
-        int pageSize = Math.Clamp(o.PageSize, 1, 500);
         int total = repository.CountApproved(contentKey);
-        int pageCount = Math.Max(1, (total + pageSize - 1) / pageSize);
-        int page = int.TryParse(Request.Query["bdcp"].FirstOrDefault(), out int p) ? Math.Clamp(p, 1, pageCount) : 1;
-        var comments = repository.ListApproved(contentKey, (page - 1) * pageSize, pageSize)
+        var (page, pageSize, pageCount, skip) = Window(total, o.PageSize, Request.Query["bdcp"].FirstOrDefault());
+        var comments = repository.ListApproved(contentKey, skip, pageSize)
             .Select(r => new CommentView(r.Name, r.CreatedUtc, r.Body))
             .ToList();
 

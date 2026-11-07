@@ -11,10 +11,31 @@ namespace BaryoDev.Umbraco.Comments.Tests;
 
 public class SubmissionTests
 {
-    private sealed class NullProxy : DispatchProxy
+    /// <summary>Only used for IContentService, whose lookup returns null so a submission ends at NoSuchPage.</summary>
+    public class ContentProxy : DispatchProxy
     {
-        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
-            targetMethod?.ReturnType.IsValueType == true ? Activator.CreateInstance(targetMethod.ReturnType) : null;
+        protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
+    }
+
+    private sealed class RecordingRepository : ICommentRepository
+    {
+        public List<CommentRow> Added { get; } = [];
+
+        public void Add(CommentRow row) => Added.Add(row);
+
+        public IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int skip, int take) => [];
+
+        public int CountApproved(Guid contentKey) => 0;
+
+        public int DeleteForContent(Guid contentKey) => 0;
+
+        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take) => [];
+
+        public CommentCounts Counts() => new(0, 0, 0);
+
+        public bool SetStatus(Guid id, CommentStatus status) => false;
+
+        public bool Delete(Guid id) => false;
     }
 
     private sealed class Rig
@@ -22,15 +43,16 @@ public class SubmissionTests
         public FakeTimeProvider Time { get; } = new(new DateTimeOffset(2026, 11, 7, 12, 0, 0, TimeSpan.Zero));
         public FormToken Tokens { get; }
         public CommentSubmission Submission { get; }
+        public RecordingRepository Repository { get; } = new();
 
         public Rig(CommentsOptions options)
         {
             Tokens = new FormToken(new EphemeralDataProtectionProvider(), Time);
             Submission = new CommentSubmission(
-                DispatchProxy.Create<ICommentRepository, NullProxy>(),
+                Repository,
                 new RateLimiter(Time),
                 Tokens,
-                DispatchProxy.Create<IContentService, NullProxy>(),
+                DispatchProxy.Create<IContentService, ContentProxy>(),
                 Options.Create(options),
                 Time);
         }
@@ -48,6 +70,7 @@ public class SubmissionTests
     {
         var rig = new Rig(new CommentsOptions());
         Assert.Equal(SubmitResult.Dropped, rig.Send(honeypot: "http://spam.example"));
+        Assert.Empty(rig.Repository.Added);
     }
 
     [Fact]
