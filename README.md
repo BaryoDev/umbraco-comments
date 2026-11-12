@@ -64,10 +64,6 @@ Section `BaryoDev:Comments` in appsettings:
 
 Visitor sign-in, replies, reactions and notification emails. See `docs/design.md`.
 
-## TODO
-
-The `icon.png` is a placeholder copied from another BaryoDev package. Replace it before publishing.
-
 ## License
 
 MIT

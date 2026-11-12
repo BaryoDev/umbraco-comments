@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
@@ -161,8 +162,12 @@ public class CommentFlowTests : UmbracoIntegrationTest
         Comments.Add(hidden);
         CommentsApiController api = Restricted(open);
 
-        var list = Items(await api.List());
-        Assert.That(list.Select(i => i.Name), Is.EqualTo(new[] { "seen" }));
+        var result = (CommentList)((OkObjectResult)await api.List()).Value!;
+        Assert.That(result.Items.Select(i => i.Name), Is.EqualTo(new[] { "seen" }));
+        Assert.That(result.Counts, Is.EqualTo(new CommentCounts(1, 0, 0)));
+        Assert.That(result.Total, Is.EqualTo(1));
+        var admin = (CommentList)((OkObjectResult)await Admin().List()).Value!;
+        Assert.That(admin.Counts, Is.EqualTo(new CommentCounts(2, 0, 0)));
 
         Assert.That(await api.Approve(hidden.Id), Is.InstanceOf<ForbidResult>());
         Assert.That(await api.Spam(hidden.Id), Is.InstanceOf<ForbidResult>());
@@ -235,7 +240,7 @@ public class CommentFlowTests : UmbracoIntegrationTest
             GetRequiredService<IContentService>(),
             Options.Create(options),
             TimeProvider.System);
-        return submission.Submit(new CommentInput(pageKey, "Ana", null, "A real comment", null, tokens.Issue(), "1.1.1.1"));
+        return submission.Submit(new CommentInput(pageKey, "Ana", null, "A real comment", null, tokens.Issue(pageKey), "1.1.1.1"));
     }
 
     [Test]
@@ -326,17 +331,23 @@ public class CommentFlowTests : UmbracoIntegrationTest
         Assert.That(Comments.CountApproved(key), Is.EqualTo(0));
     }
 
-    [Test]
-    public async Task Missing_antiforgery_redirects_with_error_and_keeps_the_text()
+    private static CommentsController Controller(CommentSubmission? submission, IAntiforgery antiforgery, ITempDataProvider tempDataProvider)
     {
         var http = new DefaultHttpContext();
-        var controller = new CommentsController(null!, new FailingAntiforgery())
+        var context = new ActionContext(http, new RouteData(), new ControllerActionDescriptor { ControllerName = "Comments", ActionName = "Submit" });
+        return new CommentsController(submission!, antiforgery)
         {
-            ControllerContext = new ControllerContext(new ActionContext(
-                http, new RouteData(), new ControllerActionDescriptor { ControllerName = "Comments", ActionName = "Submit" })),
-            TempData = new TempDataDictionary(http, new NoTempDataProvider()),
-            Url = new LocalOnlyUrlHelper(),
+            ControllerContext = new ControllerContext(context),
+            TempData = new TempDataDictionary(http, tempDataProvider),
+            // The real helper, so the open redirect guard under test is the one that ships.
+            Url = new UrlHelper(context),
         };
+    }
+
+    [Test]
+    public async Task Missing_antiforgery_redirects_with_error_and_stores_no_text()
+    {
+        var controller = Controller(null, new FailingAntiforgery(), new NoTempDataProvider());
 
         var result = await controller.Submit(Guid.NewGuid(), "/blog/post", "Ana", "ana@example.com", "my long comment", null, "token");
 
@@ -344,8 +355,67 @@ public class CommentFlowTests : UmbracoIntegrationTest
         Assert.That(redirect, Is.Not.Null);
         Assert.That(redirect!.Url, Does.Contain("bdc=error-antiforgery"));
         Assert.That(redirect.Url, Does.StartWith("/blog/post?"));
-        Assert.That(controller.TempData[CommentsController.DraftBody], Is.EqualTo("my long comment"));
-        Assert.That(controller.TempData[CommentsController.DraftName], Is.EqualTo("Ana"));
+        Assert.That(controller.TempData, Is.Empty);
+    }
+
+    [Test]
+    public async Task A_long_non_ascii_post_that_fails_sets_no_oversized_cookies()
+    {
+        // The default provider, not a stub: it is the one that writes cookies.
+        using var provider = new ServiceCollection().AddLogging().AddDataProtection().Services.AddControllersWithViews().Services.BuildServiceProvider();
+        var tempDataProvider = provider.GetRequiredService<ITempDataProvider>();
+        Assert.That(tempDataProvider, Is.InstanceOf<CookieTempDataProvider>());
+        var controller = Controller(null, new FailingAntiforgery(), tempDataProvider);
+        string text = new('\u00e9', 4000);
+
+        await controller.Submit(Guid.NewGuid(), "/blog/post", text, text, text, null, "token");
+        controller.TempData.Save();
+
+        var cookies = controller.HttpContext.Response.Headers.SetCookie;
+        Assert.That(cookies.Sum(c => c!.Length), Is.LessThan(4096), "Set-Cookie bytes for a failed post");
+    }
+
+    [Test]
+    public async Task A_valid_comment_redirects_back_to_the_page()
+    {
+        var key = PublishPage();
+        var options = new CommentsOptions { MinSecondsOnForm = 0 };
+        var tokens = new FormToken(GetRequiredService<IDataProtectionProvider>(), TimeProvider.System);
+        var submission = new CommentSubmission(Comments, new RateLimiter(TimeProvider.System), tokens,
+            GetRequiredService<IContentService>(), Options.Create(options), TimeProvider.System);
+        var controller = Controller(submission, new PassingAntiforgery(), new NoTempDataProvider());
+
+        var result = await controller.Submit(key, "/blog/post?bdcp=2#x", "Ana", null, "A real comment", null, tokens.Issue(key));
+
+        Assert.That(((LocalRedirectResult)result).Url, Is.EqualTo("/blog/post?bdc=pending#comments"));
+        Assert.That(Comments.List(CommentStatus.Pending, 0, 10), Has.Count.EqualTo(1));
+    }
+
+    [TestCase("//evil.example")]
+    [TestCase("https://evil.example/x")]
+    [TestCase("/\\evil.example")]
+    [TestCase("")]
+    [TestCase(null)]
+    public async Task A_non_local_return_url_falls_back_to_the_site_root(string? returnUrl)
+    {
+        var controller = Controller(null, new FailingAntiforgery(), new NoTempDataProvider());
+
+        var result = await controller.Submit(Guid.NewGuid(), returnUrl, "Ana", null, "text", null, "token");
+
+        Assert.That(((LocalRedirectResult)result).Url, Is.EqualTo("/?bdc=error-antiforgery#comments"));
+    }
+
+    private sealed class PassingAntiforgery : IAntiforgery
+    {
+        public Task ValidateRequestAsync(HttpContext httpContext) => Task.CompletedTask;
+
+        public AntiforgeryTokenSet GetAndStoreTokens(HttpContext httpContext) => throw new NotSupportedException();
+
+        public AntiforgeryTokenSet GetTokens(HttpContext httpContext) => throw new NotSupportedException();
+
+        public Task<bool> IsRequestValidAsync(HttpContext httpContext) => throw new NotSupportedException();
+
+        public void SetCookieTokenAndHeader(HttpContext httpContext) => throw new NotSupportedException();
     }
 
     private sealed class FailingAntiforgery : IAntiforgery
@@ -368,20 +438,5 @@ public class CommentFlowTests : UmbracoIntegrationTest
         public void SaveTempData(HttpContext context, IDictionary<string, object> values)
         {
         }
-    }
-
-    private sealed class LocalOnlyUrlHelper : IUrlHelper
-    {
-        public ActionContext ActionContext => throw new NotSupportedException();
-
-        public string? Action(UrlActionContext actionContext) => throw new NotSupportedException();
-
-        public string? Content(string? contentPath) => contentPath;
-
-        public bool IsLocalUrl(string? url) => !string.IsNullOrEmpty(url) && url[0] == '/' && (url.Length == 1 || (url[1] != '/' && url[1] != '\\'));
-
-        public string? RouteUrl(UrlRouteContext routeContext) => throw new NotSupportedException();
-
-        public string? Link(string? routeName, object? values) => throw new NotSupportedException();
     }
 }

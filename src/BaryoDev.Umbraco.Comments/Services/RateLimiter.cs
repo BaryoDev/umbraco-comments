@@ -3,9 +3,11 @@ using System.Text;
 
 namespace BaryoDev.Umbraco.Comments.Services;
 
-/// <summary>In-memory sliding window per client. The address is hashed with a per-process key and never kept.</summary>
-public sealed class RateLimiter(TimeProvider time)
+/// <summary>In-memory sliding window per client, at most 50,000 clients at a time (new clients are refused while it is full). The address is hashed with a per-process key and never kept.</summary>
+public sealed class RateLimiter(TimeProvider time, int maxTrackedClients = RateLimiter.DefaultMaxTrackedClients)
 {
+    public const int DefaultMaxTrackedClients = 50_000;
+
     private readonly byte[] _key = RandomNumberGenerator.GetBytes(32);
     private readonly Dictionary<string, Queue<DateTimeOffset>> _hits = new();
     private readonly Lock _gate = new();
@@ -24,6 +26,14 @@ public sealed class RateLimiter(TimeProvider time)
             }
             if (!_hits.TryGetValue(id, out var queue))
             {
+                if (_hits.Count >= maxTrackedClients)
+                {
+                    Sweep(now, window);
+                    if (_hits.Count >= maxTrackedClients)
+                    {
+                        return false;
+                    }
+                }
                 queue = new Queue<DateTimeOffset>();
                 _hits[id] = queue;
             }
@@ -38,6 +48,11 @@ public sealed class RateLimiter(TimeProvider time)
             queue.Enqueue(now);
             return true;
         }
+    }
+
+    internal int TrackedClients
+    {
+        get { lock (_gate) { return _hits.Count; } }
     }
 
     private void Sweep(DateTimeOffset now, TimeSpan window)

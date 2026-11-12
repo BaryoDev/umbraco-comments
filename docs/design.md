@@ -39,7 +39,7 @@ Management API (backoffice token, content section access), under `/umbraco/manag
 - Per-IP sliding window in memory. The IP is hashed with a random per-process key, so no raw IP is held and nothing survives a restart.
 - IPv6 clients share one bucket per /64.
 - Zero-width characters are stripped before length checks.
-- A failed post (including an antiforgery failure) redirects back with an error code and keeps what was typed, through TempData.
+- A failed post (including an antiforgery failure) redirects back with an error code and nothing typed goes into TempData (cookie TempData overflows the header limit). The form script keeps the draft in sessionStorage in that tab.
 - Deleting a page deletes its comments.
 - Length limits on name, email and body, enforced on the server.
 - The target node must exist and be published.

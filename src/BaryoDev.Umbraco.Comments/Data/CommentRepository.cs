@@ -35,20 +35,37 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
         return n;
     }
 
-    public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take)
+    public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid>? contentKeys = null)
     {
+        if (contentKeys is { Count: 0 })
+        {
+            return [];
+        }
         using var scope = scopeProvider.CreateScope(autoComplete: true);
-        return scope.Database.SkipTake<CommentRow>(skip, take,
-            "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC, Id DESC",
-            (int)status);
+        return contentKeys is null
+            ? scope.Database.SkipTake<CommentRow>(skip, take,
+                "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC, Id DESC", (int)status)
+            : scope.Database.SkipTake<CommentRow>(skip, take,
+                "SELECT * FROM baryoComment WHERE Status = @0 AND ContentKey IN (@1) ORDER BY CreatedUtc DESC, Id DESC", (int)status, contentKeys);
     }
 
-    public CommentCounts Counts()
+    public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null)
+    {
+        if (contentKeys is { Count: 0 })
+        {
+            return new CommentCounts(0, 0, 0);
+        }
+        using var scope = scopeProvider.CreateScope(autoComplete: true);
+        int Count(CommentStatus s) => contentKeys is null
+            ? scope.Database.ExecuteScalar<int>("SELECT COUNT(*) FROM baryoComment WHERE Status = @0", (int)s)
+            : scope.Database.ExecuteScalar<int>("SELECT COUNT(*) FROM baryoComment WHERE Status = @0 AND ContentKey IN (@1)", (int)s, contentKeys);
+        return new CommentCounts(Count(CommentStatus.Pending), Count(CommentStatus.Approved), Count(CommentStatus.Spam));
+    }
+
+    public IReadOnlyList<Guid> ContentKeys()
     {
         using var scope = scopeProvider.CreateScope(autoComplete: true);
-        int Count(CommentStatus s) =>
-            scope.Database.ExecuteScalar<int>("SELECT COUNT(*) FROM baryoComment WHERE Status = @0", (int)s);
-        return new CommentCounts(Count(CommentStatus.Pending), Count(CommentStatus.Approved), Count(CommentStatus.Spam));
+        return scope.Database.Fetch<Guid>("SELECT DISTINCT ContentKey FROM baryoComment");
     }
 
     public CommentRow? Get(Guid id)

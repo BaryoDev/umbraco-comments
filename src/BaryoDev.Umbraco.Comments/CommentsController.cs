@@ -9,11 +9,13 @@ namespace BaryoDev.Umbraco.Comments;
 [Route("baryo-comments")]
 public sealed class CommentsController(CommentSubmission submission, IAntiforgery antiforgery) : Controller
 {
-    public const string DraftName = "bdc.name";
-    public const string DraftEmail = "bdc.email";
-    public const string DraftBody = "bdc.body";
+    /// <summary>Largest accepted post. A valid comment is a few KB at most.</summary>
+    public const int MaxRequestBytes = 32_768;
+    public const int MaxFieldBytes = 16_384;
 
     [HttpPost("submit")]
+    [RequestSizeLimit(MaxRequestBytes)]
+    [RequestFormLimits(ValueLengthLimit = MaxFieldBytes, MultipartBodyLengthLimit = MaxRequestBytes)]
     public async Task<IActionResult> Submit(
         [FromForm] Guid contentKey,
         [FromForm] string? returnUrl,
@@ -40,31 +42,10 @@ public sealed class CommentsController(CommentSubmission submission, IAntiforger
             code = "error-antiforgery";
         }
 
-        if (code.StartsWith("error-", StringComparison.Ordinal))
-        {
-            TempData[DraftName] = Cut(name, CommentsOptions.HardNameLimit);
-            TempData[DraftEmail] = Cut(email, CommentsOptions.HardEmailLimit);
-            TempData[DraftBody] = Cut(body, CommentsOptions.HardBodyLimit);
-        }
-
         string target = !string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl) ? returnUrl : "/";
         int cut = target.IndexOfAny(['?', '#']);
         string path = cut < 0 ? target : target[..cut];
         return LocalRedirect($"{path}?bdc={code}#comments");
-    }
-
-    /// <summary>Cuts to max chars without splitting a surrogate pair.</summary>
-    internal static string Cut(string? value, int max)
-    {
-        if (value is null)
-        {
-            return string.Empty;
-        }
-        if (value.Length <= max)
-        {
-            return value;
-        }
-        return char.IsHighSurrogate(value[max - 1]) ? value[..(max - 1)] : value[..max];
     }
 
     /// <summary>IPv4 as is, IPv6 reduced to its /64 so a client rotating inside a prefix shares one bucket.</summary>
