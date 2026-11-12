@@ -47,14 +47,16 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
                 "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC, Id DESC", (int)status);
         }
 
-        // Each batch returns its own first skip+take rows. Merged and sorted again, the right page is the slice after skip.
+        // Each batch returns its own first skip+take rows in the database's order. The batches are joined in key order and
+        // sorted by CreatedUtc alone (a stable sort), so ties keep one fixed order: batch, then the database's order inside it.
+        // Each batch's cut follows the same order, so pages never repeat or skip a row, whatever the Id collation.
         var merged = new List<CommentRow>();
-        foreach (Guid[] batch in contentKeys.Chunk(KeyBatch))
+        foreach (Guid[] batch in contentKeys.Order().Chunk(KeyBatch))
         {
             merged.AddRange(scope.Database.SkipTake<CommentRow>(0, skip + take,
                 "SELECT * FROM baryoComment WHERE Status = @0 AND ContentKey IN (@1) ORDER BY CreatedUtc DESC, Id DESC", (int)status, batch));
         }
-        return merged.OrderByDescending(r => r.CreatedUtc).ThenByDescending(r => r.Id).Skip(skip).Take(take).ToList();
+        return merged.OrderByDescending(r => r.CreatedUtc).Skip(skip).Take(take).ToList();
     }
 
     public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null)

@@ -200,6 +200,25 @@ public class CommentFlowTests : UmbracoIntegrationTest
     }
 
     [Test]
+    public void Rows_with_the_same_timestamp_across_key_batches_page_without_repeats_or_gaps()
+    {
+        var keys = Enumerable.Range(0, 2300).Select(_ => Guid.NewGuid()).ToList();
+        foreach (Guid key in keys)
+        {
+            Comments.Add(Row(key, CommentStatus.Pending, 7));
+        }
+
+        var seen = new List<Guid>();
+        for (int skip = 0; skip < 2300; skip += 100)
+        {
+            seen.AddRange(Comments.List(CommentStatus.Pending, skip, 100, keys).Select(r => r.Id));
+        }
+
+        Assert.That(seen, Has.Count.EqualTo(2300));
+        Assert.That(seen.Distinct().Count(), Is.EqualTo(2300));
+    }
+
+    [Test]
     public async Task Only_administrators_see_comments_whose_page_is_gone()
     {
         var gone = Row(Guid.NewGuid(), CommentStatus.Pending, 1, "orphan");

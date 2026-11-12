@@ -9,9 +9,9 @@ namespace BaryoDev.Umbraco.Comments;
 [Route("baryo-comments")]
 public sealed class CommentsController(CommentSubmission submission, IAntiforgery antiforgery) : Controller
 {
-    /// <summary>Largest accepted post. A valid comment is a few KB at most.</summary>
-    public const int MaxRequestBytes = 32_768;
-    public const int MaxFieldBytes = 16_384;
+    /// <summary>Largest accepted post. A valid comment is a few KB at most. 4000 CJK characters URL-encode to about 36 KB.</summary>
+    public const int MaxRequestBytes = 65_536;
+    public const int MaxFieldBytes = 49_152;
 
     [HttpPost("submit")]
     [RequestSizeLimit(MaxRequestBytes)]

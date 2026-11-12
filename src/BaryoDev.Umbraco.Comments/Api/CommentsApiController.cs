@@ -127,7 +127,20 @@ public sealed class CommentsApiController(
     }
 
     // Fails closed: no user, no access. Rows of deleted pages have no node to check, so only administrators see them.
+    private readonly Dictionary<Guid, bool> _seen = [];
+
     private async Task<bool> CanSeeAsync(Guid contentKey)
+    {
+        if (_seen.TryGetValue(contentKey, out bool known))
+        {
+            return known;
+        }
+        bool allowed = await CheckAsync(contentKey);
+        _seen[contentKey] = allowed;
+        return allowed;
+    }
+
+    private async Task<bool> CheckAsync(Guid contentKey)
     {
         IUser? user = security.BackOfficeSecurity?.CurrentUser;
         if (user is null)
