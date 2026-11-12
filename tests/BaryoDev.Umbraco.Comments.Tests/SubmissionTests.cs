@@ -194,38 +194,50 @@ public class SubmissionTests
     }
 
     [Fact]
-    public void Limiter_tracks_at_most_the_cap_and_still_serves_known_clients()
+    public void A_full_limiter_evicts_old_clients_and_still_serves_new_ones()
     {
-        var limiter = new RateLimiter(new FakeTimeProvider(), maxTrackedClients: 100);
+        var time = new FakeTimeProvider();
+        var limiter = new RateLimiter(time, maxTrackedClients: 100);
         var window = TimeSpan.FromMinutes(10);
 
-        int accepted = 0;
+        for (int i = 0; i < 99; i++)
+        {
+            Assert.True(limiter.TryAcquire("client-" + i, 1, window));
+            time.Advance(TimeSpan.FromSeconds(1));
+        }
+        // The most recent client uses up its allowance.
+        Assert.True(limiter.TryAcquire("heavy", 1, window));
+        Assert.False(limiter.TryAcquire("heavy", 1, window));
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        // The table is at the cap. New clients are let in, and the table stays bounded.
         for (int i = 0; i < 100_000; i++)
         {
-            if (limiter.TryAcquire("client-" + i, 5, window))
-            {
-                accepted++;
-            }
+            Assert.True(limiter.TryAcquire("new-" + i, 1, window), "new client " + i);
         }
-
-        Assert.Equal(100, accepted);
-        Assert.Equal(100, limiter.TrackedClients);
-        Assert.True(limiter.TryAcquire("client-0", 5, window));
+        Assert.True(limiter.TrackedClients <= 100);
     }
 
     [Fact]
-    public void Limiter_frees_room_once_the_window_has_passed()
+    public void An_over_limit_client_stays_refused_when_the_table_fills()
     {
         var time = new FakeTimeProvider();
-        var limiter = new RateLimiter(time, maxTrackedClients: 2);
+        var limiter = new RateLimiter(time, maxTrackedClients: 100);
         var window = TimeSpan.FromMinutes(10);
+        for (int i = 0; i < 90; i++)
+        {
+            limiter.TryAcquire("client-" + i, 1, window);
+            time.Advance(TimeSpan.FromSeconds(1));
+        }
+        Assert.True(limiter.TryAcquire("heavy", 1, window));
+        time.Advance(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 20; i++)
+        {
+            Assert.True(limiter.TryAcquire("late-" + i, 1, window));
+            time.Advance(TimeSpan.FromSeconds(1));
+        }
 
-        Assert.True(limiter.TryAcquire("a", 5, window));
-        Assert.True(limiter.TryAcquire("b", 5, window));
-        Assert.False(limiter.TryAcquire("c", 5, window));
-
-        time.Advance(TimeSpan.FromMinutes(11));
-        Assert.True(limiter.TryAcquire("c", 5, window));
+        Assert.False(limiter.TryAcquire("heavy", 1, window));
     }
 
     [Fact]

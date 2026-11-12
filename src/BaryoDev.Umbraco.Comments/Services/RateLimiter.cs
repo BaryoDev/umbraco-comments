@@ -3,7 +3,7 @@ using System.Text;
 
 namespace BaryoDev.Umbraco.Comments.Services;
 
-/// <summary>In-memory sliding window per client, at most 50,000 clients at a time (new clients are refused while it is full). The address is hashed with a per-process key and never kept.</summary>
+/// <summary>In-memory sliding window per client, at most 50,000 clients at a time. When it is full the least recently seen clients are dropped, so a new client is never refused for that reason. The address is hashed with a per-process key and never kept.</summary>
 public sealed class RateLimiter(TimeProvider time, int maxTrackedClients = RateLimiter.DefaultMaxTrackedClients)
 {
     public const int DefaultMaxTrackedClients = 50_000;
@@ -31,7 +31,7 @@ public sealed class RateLimiter(TimeProvider time, int maxTrackedClients = RateL
                     Sweep(now, window);
                     if (_hits.Count >= maxTrackedClients)
                     {
-                        return false;
+                        Evict(maxTrackedClients / 10 + 1);
                     }
                 }
                 queue = new Queue<DateTimeOffset>();
@@ -53,6 +53,15 @@ public sealed class RateLimiter(TimeProvider time, int maxTrackedClients = RateL
     internal int TrackedClients
     {
         get { lock (_gate) { return _hits.Count; } }
+    }
+
+    // A full table never turns a client away. The least recently seen tenth goes, so the cost is paid once per many new clients.
+    private void Evict(int count)
+    {
+        foreach (var key in _hits.OrderBy(p => p.Value.Count == 0 ? DateTimeOffset.MinValue : p.Value.Last()).Take(count).Select(p => p.Key).ToList())
+        {
+            _hits.Remove(key);
+        }
     }
 
     private void Sweep(DateTimeOffset now, TimeSpan window)

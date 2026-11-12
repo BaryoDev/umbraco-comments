@@ -35,30 +35,35 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
         return n;
     }
 
+    // SQL Server allows about 2,100 parameters, so a key list goes in batches.
+    internal const int KeyBatch = 1000;
+
     public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid>? contentKeys = null)
     {
-        if (contentKeys is { Count: 0 })
-        {
-            return [];
-        }
         using var scope = scopeProvider.CreateScope(autoComplete: true);
-        return contentKeys is null
-            ? scope.Database.SkipTake<CommentRow>(skip, take,
-                "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC, Id DESC", (int)status)
-            : scope.Database.SkipTake<CommentRow>(skip, take,
-                "SELECT * FROM baryoComment WHERE Status = @0 AND ContentKey IN (@1) ORDER BY CreatedUtc DESC, Id DESC", (int)status, contentKeys);
+        if (contentKeys is null)
+        {
+            return scope.Database.SkipTake<CommentRow>(skip, take,
+                "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC, Id DESC", (int)status);
+        }
+
+        // Each batch returns its own first skip+take rows. Merged and sorted again, the right page is the slice after skip.
+        var merged = new List<CommentRow>();
+        foreach (Guid[] batch in contentKeys.Chunk(KeyBatch))
+        {
+            merged.AddRange(scope.Database.SkipTake<CommentRow>(0, skip + take,
+                "SELECT * FROM baryoComment WHERE Status = @0 AND ContentKey IN (@1) ORDER BY CreatedUtc DESC, Id DESC", (int)status, batch));
+        }
+        return merged.OrderByDescending(r => r.CreatedUtc).ThenByDescending(r => r.Id).Skip(skip).Take(take).ToList();
     }
 
     public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null)
     {
-        if (contentKeys is { Count: 0 })
-        {
-            return new CommentCounts(0, 0, 0);
-        }
         using var scope = scopeProvider.CreateScope(autoComplete: true);
         int Count(CommentStatus s) => contentKeys is null
             ? scope.Database.ExecuteScalar<int>("SELECT COUNT(*) FROM baryoComment WHERE Status = @0", (int)s)
-            : scope.Database.ExecuteScalar<int>("SELECT COUNT(*) FROM baryoComment WHERE Status = @0 AND ContentKey IN (@1)", (int)s, contentKeys);
+            : contentKeys.Chunk(KeyBatch).Sum(batch => scope.Database.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM baryoComment WHERE Status = @0 AND ContentKey IN (@1)", (int)s, batch));
         return new CommentCounts(Count(CommentStatus.Pending), Count(CommentStatus.Approved), Count(CommentStatus.Spam));
     }
 

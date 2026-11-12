@@ -178,6 +178,28 @@ public class CommentFlowTests : UmbracoIntegrationTest
     }
 
     [Test]
+    public void A_key_filter_larger_than_one_batch_pages_and_counts_correctly()
+    {
+        var keys = Enumerable.Range(0, 2300).Select(_ => Guid.NewGuid()).ToList();
+        for (int i = 0; i < keys.Count; i++)
+        {
+            var row = Row(keys[i], CommentStatus.Pending, i % 60, "c" + i);
+            row.CreatedUtc = row.CreatedUtc.AddHours(i / 60);
+            Comments.Add(row);
+        }
+        Comments.Add(Row(Guid.NewGuid(), CommentStatus.Pending, 1, "not allowed"));
+
+        Assert.That(Comments.Counts(keys).Pending, Is.EqualTo(2300));
+        Assert.That(Comments.Counts().Pending, Is.EqualTo(2301));
+        var all = Comments.List(CommentStatus.Pending, 0, 5000).Where(r => keys.Contains(r.ContentKey)).Select(r => r.Id).ToList();
+        foreach (int skip in new[] { 0, 990, 1000, 2290 })
+        {
+            var page = Comments.List(CommentStatus.Pending, skip, 50, keys).Select(r => r.Id);
+            Assert.That(page, Is.EqualTo(all.Skip(skip).Take(50)), "skip " + skip);
+        }
+    }
+
+    [Test]
     public async Task Only_administrators_see_comments_whose_page_is_gone()
     {
         var gone = Row(Guid.NewGuid(), CommentStatus.Pending, 1, "orphan");
