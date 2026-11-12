@@ -14,9 +14,6 @@ public sealed record CommentsModel(
     int Total,
     string? LaterUrl,
     string? EarlierUrl,
-    string DraftName,
-    string DraftEmail,
-    string DraftBody,
     string FormToken,
     string? Notice,
     bool IsError,
@@ -41,7 +38,7 @@ public sealed class CommentsViewComponent(ICommentRepository repository, FormTok
         ["error-emailrequired"] = "Add an email address.",
         ["error-emailinvalid"] = "That email address does not look right.",
         ["error-bodyinvalid"] = "The comment is too short or too long.",
-        ["error-antiforgery"] = "The form expired. Your text is still here, send it again.",
+        ["error-antiforgery"] = "The form expired. Send it again.",
         ["error-nosuchpage"] = "This page can not take comments.",
     };
 
@@ -71,13 +68,11 @@ public sealed class CommentsViewComponent(ICommentRepository repository, FormTok
         string? newer = page > 1 ? $"{path}?bdcp={page - 1}#comments" : null;
 
         bool failed = code?.StartsWith("error-", StringComparison.Ordinal) == true;
-        string Draft(string key) => failed && TempData[key] is string s ? s : string.Empty;
 
         string returnUrl = path;
         return View(new CommentsModel(
             contentKey, returnUrl, comments, total, older, newer,
-            Draft(CommentsController.DraftName), Draft(CommentsController.DraftEmail), Draft(CommentsController.DraftBody),
-            tokens.Issue(), notice, failed,
+            tokens.Issue(contentKey), notice, failed,
             o.RequireEmail, Math.Min(o.MaxNameLength, CommentsOptions.HardNameLimit), Math.Min(o.MaxEmailLength, CommentsOptions.HardEmailLimit),
             Math.Min(o.MaxBodyLength, CommentsOptions.HardBodyLimit)));
     }

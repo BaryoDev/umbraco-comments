@@ -32,7 +32,7 @@
         }
     }
 
-    <form class="bdc__form" method="post" action="@Url.Content("~/baryo-comments/submit")">
+    <form class="bdc__form" method="post" data-bdc-state="@(Model.IsError ? "error" : Model.Notice is not null ? "sent" : "")" action="@Url.Content("~/baryo-comments/submit")">
         @Html.AntiForgeryToken()
         <input type="hidden" name="contentKey" value="@Model.ContentKey" />
         <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
@@ -43,18 +43,19 @@
         <h3 class="bdc__form-title">Leave a comment</h3>
         <p class="bdc__field">
             <label for="bdc-name">Name</label>
-            <input id="bdc-name" name="name" type="text" required maxlength="@Model.MaxNameLength" autocomplete="name" value="@Model.DraftName" />
+            <input id="bdc-name" name="name" type="text" required maxlength="@Model.MaxNameLength" autocomplete="name" />
         </p>
         <p class="bdc__field">
             <label for="bdc-email">Email@(Model.RequireEmail ? "" : " (optional)")</label>
-            <input id="bdc-email" name="email" type="email" maxlength="@Model.MaxEmailLength" autocomplete="email" required="@Model.RequireEmail" aria-describedby="bdc-email-hint" value="@Model.DraftEmail" />
+            <input id="bdc-email" name="email" type="email" maxlength="@Model.MaxEmailLength" autocomplete="email" required="@Model.RequireEmail" aria-describedby="bdc-email-hint" />
             <span class="bdc__hint" id="bdc-email-hint">Never shown on the page.</span>
         </p>
         <p class="bdc__field">
             <label for="bdc-body">Comment</label>
-            <textarea id="bdc-body" name="body" rows="5" required maxlength="@Model.MaxBodyLength">@Model.DraftBody</textarea>
+            <textarea id="bdc-body" name="body" rows="5" required maxlength="@Model.MaxBodyLength"></textarea>
             <span class="bdc__hint">Plain text. Comments are checked before they appear.</span>
         </p>
         <p><button type="submit" class="bdc__btn">Send comment</button></p>
     </form>
+    <script src="@Url.Content("~/App_Plugins/BaryoDev.Comments/comments-draft.js")" defer></script>
 </section>

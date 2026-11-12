@@ -43,16 +43,12 @@ public sealed class CommentsApiController(
         skip = Math.Max(0, skip);
         take = Math.Clamp(take, 1, MaxTake);
 
-        // Rows for pages the user cannot browse are left out. Administrators also see rows whose page is gone.
-        // The page is taken before the filter, so a restricted user can get a short page.
+        // Rows, counts and total cover only the pages the user can browse. Administrators also see rows whose page is gone.
+        IReadOnlyCollection<Guid>? allowed = await AllowedKeysAsync();
         var names = new Dictionary<Guid, string?>();
         var items = new List<CommentItem>();
-        foreach (CommentRow r in repository.List(parsed, skip, take))
+        foreach (CommentRow r in repository.List(parsed, skip, take, allowed))
         {
-            if (!await CanSeeAsync(r.ContentKey))
-            {
-                continue;
-            }
             if (!names.TryGetValue(r.ContentKey, out var pageName))
             {
                 pageName = content.GetById(r.ContentKey)?.Name;
@@ -61,7 +57,7 @@ public sealed class CommentsApiController(
             items.Add(new CommentItem(r.Id, r.ContentKey, pageName, r.Name, r.Email, r.Body,
                 ((CommentStatus)r.Status).ToString().ToLowerInvariant(), DateTime.SpecifyKind(r.CreatedUtc, DateTimeKind.Utc)));
         }
-        var counts = repository.Counts();
+        var counts = repository.Counts(allowed);
         int total = parsed switch { CommentStatus.Pending => counts.Pending, CommentStatus.Approved => counts.Approved, _ => counts.Spam };
         return Ok(new CommentList(items, counts, total));
     }
@@ -107,8 +103,44 @@ public sealed class CommentsApiController(
         return repository.SetStatus(id, status) ? NoContent() : NotFound();
     }
 
+    // Null means every page (administrators). Anyone else gets the pages they can browse, or none without a user.
+    private async Task<IReadOnlyCollection<Guid>?> AllowedKeysAsync()
+    {
+        IUser? user = security.BackOfficeSecurity?.CurrentUser;
+        if (user is null)
+        {
+            return [];
+        }
+        if (user.Groups.Any(g => g.Alias == Constants.Security.AdminGroupAlias))
+        {
+            return null;
+        }
+        var allowed = new List<Guid>();
+        foreach (Guid key in repository.ContentKeys())
+        {
+            if (await CanSeeAsync(key))
+            {
+                allowed.Add(key);
+            }
+        }
+        return allowed;
+    }
+
     // Fails closed: no user, no access. Rows of deleted pages have no node to check, so only administrators see them.
+    private readonly Dictionary<Guid, bool> _seen = [];
+
     private async Task<bool> CanSeeAsync(Guid contentKey)
+    {
+        if (_seen.TryGetValue(contentKey, out bool known))
+        {
+            return known;
+        }
+        bool allowed = await CheckAsync(contentKey);
+        _seen[contentKey] = allowed;
+        return allowed;
+    }
+
+    private async Task<bool> CheckAsync(Guid contentKey)
     {
         IUser? user = security.BackOfficeSecurity?.CurrentUser;
         if (user is null)

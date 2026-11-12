@@ -27,7 +27,7 @@ public sealed class CommentSubmission(
             return SubmitResult.Dropped;
         }
 
-        TimeSpan? age = tokens.Age(input.Token);
+        TimeSpan? age = tokens.Age(input.Token, input.ContentKey);
         if (age is null)
         {
             return SubmitResult.Invalid;

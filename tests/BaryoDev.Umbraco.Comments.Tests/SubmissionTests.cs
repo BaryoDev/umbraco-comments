@@ -43,9 +43,11 @@ public class SubmissionTests
 
         public int DeleteForContent(Guid contentKey) => 0;
 
-        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take) => [];
+        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid>? contentKeys = null) => [];
 
-        public CommentCounts Counts() => new(0, 0, 0);
+        public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null) => new(0, 0, 0);
+
+        public IReadOnlyList<Guid> ContentKeys() => [];
 
         public CommentRow? Get(Guid id) => null;
 
@@ -73,11 +75,13 @@ public class SubmissionTests
                 Time);
         }
 
-        public SubmitResult Send(string? name = "Ana", string? email = null, string? body = "Hello there", string? honeypot = null, string client = "1.1.1.1", int waitSeconds = 10)
+        public Guid PageKey { get; } = Guid.NewGuid();
+
+        public SubmitResult Send(string? name = "Ana", string? email = null, string? body = "Hello there", string? honeypot = null, string client = "1.1.1.1", int waitSeconds = 10, Guid? tokenFor = null)
         {
-            string token = Tokens.Issue();
+            string token = Tokens.Issue(tokenFor ?? PageKey);
             Time.Advance(TimeSpan.FromSeconds(waitSeconds));
-            return Submission.Submit(new CommentInput(Guid.NewGuid(), name, email, body, honeypot, token, client));
+            return Submission.Submit(new CommentInput(PageKey, name, email, body, honeypot, token, client));
         }
     }
 
@@ -181,15 +185,59 @@ public class SubmissionTests
     }
 
     [Fact]
-    public void Draft_cut_keeps_a_long_body_and_does_not_split_a_surrogate_pair()
+    public void A_token_issued_for_one_page_is_refused_on_another()
     {
-        string body = new string('a', 2000);
-        Assert.Equal(body, CommentsController.Cut(body, CommentsOptions.HardBodyLimit));
+        var rig = new Rig(new CommentsOptions());
 
-        string pair = new string('a', 9) + "\U0001F600";
-        Assert.Equal(new string('a', 9), CommentsController.Cut(pair, 10));
-        Assert.Equal(pair, CommentsController.Cut(pair, 11));
-        Assert.Equal(string.Empty, CommentsController.Cut(null, 10));
+        Assert.Equal(SubmitResult.Invalid, rig.Send(tokenFor: Guid.NewGuid()));
+        Assert.Equal(SubmitResult.NoSuchPage, rig.Send());
+    }
+
+    [Fact]
+    public void A_full_limiter_evicts_old_clients_and_still_serves_new_ones()
+    {
+        var time = new FakeTimeProvider();
+        var limiter = new RateLimiter(time, maxTrackedClients: 100);
+        var window = TimeSpan.FromMinutes(10);
+
+        for (int i = 0; i < 99; i++)
+        {
+            Assert.True(limiter.TryAcquire("client-" + i, 1, window));
+            time.Advance(TimeSpan.FromSeconds(1));
+        }
+        // The most recent client uses up its allowance.
+        Assert.True(limiter.TryAcquire("heavy", 1, window));
+        Assert.False(limiter.TryAcquire("heavy", 1, window));
+        time.Advance(TimeSpan.FromSeconds(1));
+
+        // The table is at the cap. New clients are let in, and the table stays bounded.
+        for (int i = 0; i < 100_000; i++)
+        {
+            Assert.True(limiter.TryAcquire("new-" + i, 1, window), "new client " + i);
+        }
+        Assert.True(limiter.TrackedClients <= 100);
+    }
+
+    [Fact]
+    public void An_over_limit_client_stays_refused_when_the_table_fills()
+    {
+        var time = new FakeTimeProvider();
+        var limiter = new RateLimiter(time, maxTrackedClients: 100);
+        var window = TimeSpan.FromMinutes(10);
+        for (int i = 0; i < 90; i++)
+        {
+            limiter.TryAcquire("client-" + i, 1, window);
+            time.Advance(TimeSpan.FromSeconds(1));
+        }
+        Assert.True(limiter.TryAcquire("heavy", 1, window));
+        time.Advance(TimeSpan.FromSeconds(1));
+        for (int i = 0; i < 20; i++)
+        {
+            Assert.True(limiter.TryAcquire("late-" + i, 1, window));
+            time.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        Assert.False(limiter.TryAcquire("heavy", 1, window));
     }
 
     [Fact]
