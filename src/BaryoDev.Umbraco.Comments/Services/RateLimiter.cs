@@ -4,9 +4,14 @@ using System.Text;
 namespace BaryoDev.Umbraco.Comments.Services;
 
 /// <summary>In-memory sliding window per client, at most 50,000 clients at a time. When it is full the least recently seen clients are dropped, so a new client is never refused for that reason. The address is hashed with a per-process key and never kept.</summary>
-public sealed class RateLimiter(TimeProvider time, int maxTrackedClients = RateLimiter.DefaultMaxTrackedClients)
+public sealed class RateLimiter(TimeProvider time, int maxTrackedClients)
 {
     public const int DefaultMaxTrackedClients = 50_000;
+
+    /// <summary>The 0.1.0 constructor. Tracks up to <see cref="DefaultMaxTrackedClients"/> clients.</summary>
+    public RateLimiter(TimeProvider time) : this(time, DefaultMaxTrackedClients)
+    {
+    }
 
     private readonly byte[] _key = RandomNumberGenerator.GetBytes(32);
     private readonly Dictionary<string, Queue<DateTimeOffset>> _hits = new();

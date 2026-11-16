@@ -30,6 +30,8 @@ Comments are removed when their page is deleted.
 
 Content section, Comments dashboard. Tabs for pending, approved and spam. Approve, mark spam or delete. The API is at `/umbraco/management/api/v1/comments` and needs Content section access.
 
+`ICommentRepositoryScoped` is implemented by the built-in repository. A custom `ICommentRepository` is used everywhere else, and the dashboard filters its rows per page (counts show zero for non-administrators).
+
 ## Abuse controls
 
 Antiforgery token, a honeypot field, a minimum time on the form, a per-IP sliding window in memory (the address is hashed and not stored), length limits, single-use form tokens, a cap on pending comments and an optional spam check hook.
@@ -38,7 +40,7 @@ Each form token works once. A second post with the same token is refused with "T
 
 ### Pending cap
 
-`MaxPendingPerPage` (default 100) and `MaxPendingTotal` (default 5000) limit pending comments. At either cap, new comments are refused with "Comments are paused for review" and nothing is saved. Approve, mark spam or delete rows to make room. `null` means no cap, `0` pauses new comments, negative values fail at startup. Auto-approved comments are not counted.
+`MaxPendingPerPage` and `MaxPendingTotal` limit pending comments. Default: none (off). Set them if spam could fill your database. The trade-off: at either cap, new comments are refused with "Comments are paused for review" and nothing is saved until a moderator clears the queue (approve, mark spam or delete rows). `null` means no cap, `0` pauses new comments, negative values fail at startup. Auto-approved comments are not counted.
 
 ### Spam check hook
 
@@ -74,8 +76,8 @@ Section `BaryoDev:Comments` in appsettings:
       "RateLimitMaxPosts": 5,
       "RateLimitWindowMinutes": 10,
       "PageSize": 50,
-      "MaxPendingPerPage": 100,
-      "MaxPendingTotal": 5000,
+      "MaxPendingPerPage": null,
+      "MaxPendingTotal": null,
       "SpamRetentionDays": null,
       "PendingRetentionDays": null
     }

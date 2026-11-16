@@ -18,10 +18,10 @@ public sealed class CommentsOptions
     public int RateLimitMaxPosts { get; set; } = 5;
     public int RateLimitWindowMinutes { get; set; } = 10;
     public int PageSize { get; set; } = 50;
-    /// <summary>Pending comments one page can hold. At the cap new comments for that page are refused and nothing is saved. Null means no cap.</summary>
-    public int? MaxPendingPerPage { get; set; } = 100;
-    /// <summary>Pending comments across all pages. Null means no cap.</summary>
-    public int? MaxPendingTotal { get; set; } = 5000;
+    /// <summary>Pending comments one page can hold. At the cap new comments for that page are refused and nothing is saved. Null (the default) means no cap.</summary>
+    public int? MaxPendingPerPage { get; set; }
+    /// <summary>Pending comments across all pages. Null (the default) means no cap.</summary>
+    public int? MaxPendingTotal { get; set; }
     /// <summary>Delete spam comments older than this many days. Null keeps them.</summary>
     public int? SpamRetentionDays { get; set; }
     /// <summary>Delete pending comments older than this many days. Null keeps them. Approved comments are never deleted by age.</summary>
