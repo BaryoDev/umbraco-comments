@@ -29,7 +29,10 @@ public sealed class CommentsController(CommentSubmission submission, IAntiforger
         try
         {
             await antiforgery.ValidateRequestAsync(HttpContext);
-            SubmitResult result = submission.Submit(new CommentInput(contentKey, name, email, body, honeypot, token, ClientKey(HttpContext.Connection.RemoteIpAddress)));
+            SubmitResult result = await submission.SubmitAsync(
+                new CommentInput(contentKey, name, email, body, honeypot, token, ClientKey(HttpContext.Connection.RemoteIpAddress)),
+                HttpContext,
+                HttpContext.RequestAborted);
             code = result switch
             {
                 SubmitResult.Pending or SubmitResult.Dropped => "pending",

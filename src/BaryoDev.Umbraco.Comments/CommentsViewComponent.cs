@@ -39,6 +39,9 @@ public sealed class CommentsViewComponent(ICommentRepository repository, FormTok
         ["error-emailinvalid"] = "That email address does not look right.",
         ["error-bodyinvalid"] = "The comment is too short or too long.",
         ["error-antiforgery"] = "The form expired. Send it again.",
+        ["error-reused"] = "That comment was already sent.",
+        ["error-paused"] = "Comments are paused for review. Try again later.",
+        ["error-rejected"] = "The comment could not be sent.",
         ["error-nosuchpage"] = "This page can not take comments.",
     };
 

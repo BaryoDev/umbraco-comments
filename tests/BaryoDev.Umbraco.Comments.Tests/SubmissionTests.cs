@@ -45,7 +45,11 @@ public class SubmissionTests
 
         public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid>? contentKeys = null) => [];
 
-        public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null) => new(0, 0, 0);
+        public int PendingTotal { get; set; }
+
+        public int PendingForPage { get; set; }
+
+        public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null) => new(contentKeys is null ? PendingTotal : PendingForPage, 0, 0);
 
         public IReadOnlyList<Guid> ContentKeys() => [];
 
@@ -63,7 +67,7 @@ public class SubmissionTests
         public CommentSubmission Submission { get; }
         public RecordingRepository Repository { get; } = new();
 
-        public Rig(CommentsOptions options, bool pagePublished = false)
+        public Rig(CommentsOptions options, bool pagePublished = false, ICommentSpamCheck? spam = null)
         {
             Tokens = new FormToken(new EphemeralDataProtectionProvider(), Time);
             Submission = new CommentSubmission(
@@ -72,7 +76,14 @@ public class SubmissionTests
                 Tokens,
                 pagePublished ? DispatchProxy.Create<IContentService, PublishedContentProxy>() : DispatchProxy.Create<IContentService, ContentProxy>(),
                 Options.Create(options),
-                Time);
+                Time,
+                spam ?? new AllowAllSpamCheck());
+        }
+
+        public SubmitResult SendToken(string token, int waitSeconds = 10)
+        {
+            Time.Advance(TimeSpan.FromSeconds(waitSeconds));
+            return Submission.Submit(new CommentInput(PageKey, "Ana", null, "Hello there", null, token, "1.1.1.1"));
         }
 
         public Guid PageKey { get; } = Guid.NewGuid();
@@ -280,5 +291,180 @@ public class SubmissionTests
             domain[i] = (i + 1) % 41 == 0 ? '.' : 'b';
         }
         return local + "@" + new string(domain) + ".com";
+    }
+
+    private sealed class FixedSpamCheck(SpamVerdict verdict) : ICommentSpamCheck
+    {
+        public CommentSpamContext? Seen { get; private set; }
+
+        public ValueTask<SpamVerdict> CheckAsync(CommentSpamContext context, CancellationToken cancellationToken)
+        {
+            Seen = context;
+            return ValueTask.FromResult(verdict);
+        }
+    }
+
+    [Fact]
+    public void A_token_is_accepted_once()
+    {
+        var rig = new Rig(new CommentsOptions(), pagePublished: true);
+        string token = rig.Tokens.Issue(rig.PageKey);
+
+        Assert.Equal(SubmitResult.Pending, rig.SendToken(token));
+        Assert.Equal(SubmitResult.Reused, rig.SendToken(token));
+        Assert.Single(rig.Repository.Added);
+    }
+
+    [Fact]
+    public void Every_token_carries_its_own_nonce()
+    {
+        var rig = new Rig(new CommentsOptions());
+        Assert.NotEqual(rig.Tokens.Issue(rig.PageKey), rig.Tokens.Issue(rig.PageKey));
+    }
+
+    [Fact]
+    public void A_token_in_the_old_two_part_format_is_invalid()
+    {
+        var provider = new EphemeralDataProtectionProvider();
+        var time = new FakeTimeProvider();
+        var key = Guid.NewGuid();
+        string old = provider.CreateProtector("BaryoDev.Umbraco.Comments.FormToken")
+            .Protect(time.GetUtcNow().ToUnixTimeSeconds() + "|" + key.ToString("N"));
+        var tokens = new FormToken(provider, time);
+
+        Assert.Null(tokens.Age(old, key));
+        Assert.Equal(TokenUse.Invalid, tokens.Use(old, key, TimeSpan.FromMinutes(5)));
+    }
+
+    [Fact]
+    public void A_full_used_token_table_evicts_expired_entries_then_fails_closed()
+    {
+        var time = new FakeTimeProvider();
+        var tokens = new FormToken(new EphemeralDataProtectionProvider(), time, maxUsedTokens: 3);
+        var key = Guid.NewGuid();
+        var maxAge = TimeSpan.FromMinutes(10);
+
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Equal(TokenUse.Accepted, tokens.Use(tokens.Issue(key), key, maxAge));
+        }
+        Assert.Equal(TokenUse.Full, tokens.Use(tokens.Issue(key), key, maxAge));
+        Assert.Equal(3, tokens.UsedCount);
+
+        time.Advance(TimeSpan.FromMinutes(11));
+        Assert.Equal(TokenUse.Accepted, tokens.Use(tokens.Issue(key), key, maxAge));
+        Assert.Equal(1, tokens.UsedCount);
+    }
+
+    [Fact]
+    public void A_full_used_token_table_gives_the_expired_result()
+    {
+        var rig = new Rig(new CommentsOptions { RateLimitMaxPosts = 100 }, pagePublished: true);
+        var tokens = new FormToken(new EphemeralDataProtectionProvider(), rig.Time, maxUsedTokens: 1);
+        var submission = new CommentSubmission(rig.Repository, new RateLimiter(rig.Time), tokens,
+            DispatchProxy.Create<IContentService, PublishedContentProxy>(), Options.Create(new CommentsOptions()), rig.Time);
+
+        SubmitResult Send()
+        {
+            string token = tokens.Issue(rig.PageKey);
+            rig.Time.Advance(TimeSpan.FromSeconds(10));
+            return submission.Submit(new CommentInput(rig.PageKey, "Ana", null, "Hello there", null, token, "1.1.1.1"));
+        }
+
+        Assert.Equal(SubmitResult.Pending, Send());
+        Assert.Equal(SubmitResult.Expired, Send());
+        Assert.Single(rig.Repository.Added);
+    }
+
+    [Fact]
+    public void The_pending_cap_per_page_refuses_and_writes_nothing()
+    {
+        var rig = new Rig(new CommentsOptions { MaxPendingPerPage = 100 }, pagePublished: true);
+        rig.Repository.PendingForPage = 99;
+        Assert.Equal(SubmitResult.Pending, rig.Send());
+
+        rig.Repository.PendingForPage = 100;
+        Assert.Equal(SubmitResult.Paused, rig.Send());
+        Assert.Single(rig.Repository.Added);
+    }
+
+    [Fact]
+    public void The_pending_cap_in_total_refuses_and_writes_nothing()
+    {
+        var rig = new Rig(new CommentsOptions { MaxPendingTotal = 5000 }, pagePublished: true);
+        rig.Repository.PendingTotal = 5000;
+
+        Assert.Equal(SubmitResult.Paused, rig.Send());
+        Assert.Empty(rig.Repository.Added);
+    }
+
+    [Fact]
+    public void A_null_cap_means_no_cap_and_the_defaults_are_set()
+    {
+        var defaults = new CommentsOptions();
+        Assert.Equal(100, defaults.MaxPendingPerPage);
+        Assert.Equal(5000, defaults.MaxPendingTotal);
+
+        var rig = new Rig(new CommentsOptions { MaxPendingPerPage = null, MaxPendingTotal = null }, pagePublished: true);
+        rig.Repository.PendingForPage = 1_000_000;
+        rig.Repository.PendingTotal = 1_000_000;
+        Assert.Equal(SubmitResult.Pending, rig.Send());
+    }
+
+    [Fact]
+    public void The_cap_does_not_apply_to_auto_approved_comments()
+    {
+        var rig = new Rig(new CommentsOptions { AutoApprove = true, MaxPendingTotal = 0 }, pagePublished: true);
+        Assert.Equal(SubmitResult.Approved, rig.Send());
+    }
+
+    [Fact]
+    public void Spam_hook_allow_saves_as_usual_and_sees_the_cleaned_comment()
+    {
+        var spam = new FixedSpamCheck(SpamVerdict.Allow);
+        var rig = new Rig(new CommentsOptions(), pagePublished: true, spam: spam);
+
+        Assert.Equal(SubmitResult.Pending, rig.Send(name: "  Ana ", email: "ana@example.com", body: " Hello there "));
+        Assert.Equal((int)CommentStatus.Pending, rig.Repository.Added.Single().Status);
+        Assert.Equal("Ana", spam.Seen!.Name);
+        Assert.Equal("ana@example.com", spam.Seen.Email);
+        Assert.Equal("Hello there", spam.Seen.Body);
+        Assert.Equal("1.1.1.1", spam.Seen.Client);
+        Assert.Equal(rig.PageKey, spam.Seen.ContentKey);
+    }
+
+    [Fact]
+    public void Spam_hook_spam_saves_with_the_spam_status_and_shows_the_normal_notice()
+    {
+        var rig = new Rig(new CommentsOptions(), pagePublished: true, spam: new FixedSpamCheck(SpamVerdict.Spam));
+
+        Assert.Equal(SubmitResult.Dropped, rig.Send());
+        Assert.Equal((int)CommentStatus.Spam, rig.Repository.Added.Single().Status);
+    }
+
+    [Fact]
+    public void Spam_hook_reject_saves_nothing()
+    {
+        var rig = new Rig(new CommentsOptions(), pagePublished: true, spam: new FixedSpamCheck(SpamVerdict.Reject));
+
+        Assert.Equal(SubmitResult.Rejected, rig.Send());
+        Assert.Empty(rig.Repository.Added);
+    }
+
+    [Fact]
+    public async Task The_default_spam_check_allows()
+    {
+        var verdict = await new AllowAllSpamCheck().CheckAsync(new CommentSpamContext(Guid.NewGuid(), "Ana", null, "Hi", "1.1.1.1", null), CancellationToken.None);
+        Assert.Equal(SpamVerdict.Allow, verdict);
+    }
+
+    [Fact]
+    public void Spam_hook_does_not_run_when_validation_fails()
+    {
+        var spam = new FixedSpamCheck(SpamVerdict.Allow);
+        var rig = new Rig(new CommentsOptions(), pagePublished: true, spam: spam);
+
+        Assert.Equal(SubmitResult.NameRequired, rig.Send(name: ""));
+        Assert.Null(spam.Seen);
     }
 }

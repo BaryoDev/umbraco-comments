@@ -32,7 +32,28 @@ Content section, Comments dashboard. Tabs for pending, approved and spam. Approv
 
 ## Abuse controls
 
-Antiforgery token, a honeypot field, a minimum time on the form, a per-IP sliding window in memory (the address is hashed and not stored), and length limits.
+Antiforgery token, a honeypot field, a minimum time on the form, a per-IP sliding window in memory (the address is hashed and not stored), length limits, single-use form tokens, a cap on pending comments and an optional spam check hook.
+
+Each form token works once. A second post with the same token is refused with "That comment was already sent". Used tokens are kept in memory on one server until they would have expired (`MaxFormAgeMinutes`), at most 50,000. If that table is full of live tokens, new posts get the "form was open too long" notice until some expire. On a load-balanced site without sticky sessions, single use holds per server, not across servers. Tokens now carry a random id, so a form that was open in a visitor's browser during the upgrade is rejected once. They reload and send again.
+
+### Pending cap
+
+`MaxPendingPerPage` (default 100) and `MaxPendingTotal` (default 5000) limit pending comments. At either cap, new comments are refused with "Comments are paused for review" and nothing is saved. Approve, mark spam or delete rows to make room. `null` means no cap, `0` pauses new comments, negative values fail at startup. Auto-approved comments are not counted.
+
+### Spam check hook
+
+Implement `ICommentSpamCheck` to run your own check after validation and before the comment is saved. It gets the cleaned name, email, body, the rate-limit client key and the `HttpContext`. Return `Allow`, `Spam` (saved with the Spam status, the visitor sees the normal notice) or `Reject` (nothing saved, the visitor sees an error). The default allows everything. If your check throws, nothing is saved.
+
+```csharp
+public sealed class LinkCheck : ICommentSpamCheck
+{
+    public ValueTask<SpamVerdict> CheckAsync(CommentSpamContext c, CancellationToken ct) =>
+        ValueTask.FromResult(c.Body.Contains("http", StringComparison.OrdinalIgnoreCase) ? SpamVerdict.Spam : SpamVerdict.Allow);
+}
+
+// in a composer
+builder.Services.AddSingleton<ICommentSpamCheck, LinkCheck>();
+```
 
 ## Config
 
@@ -52,13 +73,23 @@ Section `BaryoDev:Comments` in appsettings:
       "MaxFormAgeMinutes": 120,
       "RateLimitMaxPosts": 5,
       "RateLimitWindowMinutes": 10,
-      "PageSize": 50
+      "PageSize": 50,
+      "MaxPendingPerPage": 100,
+      "MaxPendingTotal": 5000,
+      "SpamRetentionDays": null,
+      "PendingRetentionDays": null
     }
   }
 }
 ```
 
 `PageSize` is how many approved comments show per page, with "Earlier comments" and "Later comments" links. `MaxNameLength`, `MaxEmailLength` and `MaxBodyLength` are capped at the column sizes (80, 200, 4000). Email is stored only if given and is never shown on the page.
+
+## Retention and email
+
+Off by default. Set `SpamRetentionDays` or `PendingRetentionDays` (1 or more) and an hourly background job deletes spam or pending comments older than that. Approved comments are never deleted by age. On a site with several servers each one runs the job, which is harmless.
+
+An email address is kept until its comment is deleted. To erase it, delete the comment in the dashboard or call `DELETE /umbraco/management/api/v1/comments/{id}`. Deleting a page deletes its comments.
 
 ## Not in this version
 
