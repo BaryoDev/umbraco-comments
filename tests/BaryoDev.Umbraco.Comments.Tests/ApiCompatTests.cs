@@ -114,7 +114,7 @@ public class ApiCompatTests
         Assert.True(typeof(ICommentRepositoryScoped).IsAssignableFrom(typeof(CommentRepository)));
     }
 
-    private sealed class ScopeProxy : DispatchProxy
+    public class ScopeProxy : DispatchProxy
     {
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) => null;
     }
