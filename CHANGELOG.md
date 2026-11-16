@@ -5,7 +5,9 @@
 ### Breaking
 
 - Forms open during the upgrade are rejected once, because form tokens now carry a page key and a random id.
-- A custom `ICommentRepository` no longer gets the page-scoped dashboard list. Implement the new `ICommentRepositoryScoped` to get it. Without it, editors who are not administrators see nothing in the dashboard, and the per-page pending cap, if you set one, uses the total pending count.
+- For a custom `ICommentRepository`, the dashboard counts show zero for editors who are not administrators (0.1.0 showed sitewide counts, which leaked). Rows still show, filtered per page as in 0.1.0. Implement `ICommentRepositoryScoped` for page-scoped lists and counts. If you set `MaxPendingPerPage`, a custom repository uses the total pending count for it.
+- The restored 0.1.0 members are `[Obsolete]`, so builds with warnings as errors need `NoWarn` CS0618 until they move to the new members.
+- `SubmitResult` has new members (`Reused`, `Paused`, `Rejected`). If you switch over it exhaustively, add a default arm.
 
 Every 0.1.0 public member is kept. The ones whose behaviour changed are marked `[Obsolete]`: `FormToken.Issue()` and `Age(string?)` (a token from `Issue()` is not bound to a page and is refused on submit), `CommentsModel.DraftName`, `DraftEmail`, `DraftBody` and the 0.1.0 constructor (always empty now), and `CommentsController.DraftName`, `DraftEmail`, `DraftBody`. `ICommentRepository` has its 0.1.0 members again, and the page-scoped members live in `ICommentRepositoryScoped`.
 

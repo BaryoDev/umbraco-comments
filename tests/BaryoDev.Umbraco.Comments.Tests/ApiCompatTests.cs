@@ -134,38 +134,90 @@ public class ApiCompatTests
         Assert.Same(plain, scoped);
     }
 
-    [Fact]
-    public void A_repository_without_the_scoped_interface_gets_no_scoped_query_and_returns_nothing()
-    {
-        var repository = new PlainFake();
-        Guid[] allowed = [Page];
+    private static readonly Guid Hidden = Guid.NewGuid();
 
-        var (rows, counts) = ModerationQuery.Run(repository, CommentStatus.Pending, 0, 50, allowed);
+    private static Task<bool> OnlyPage(Guid key) => Task.FromResult(key == Page);
+
+    private static PlainFake WithRows() => new()
+    {
+        Pending = 5,
+        Rows = [new CommentRow { ContentKey = Page, Body = "visible" }, new CommentRow { ContentKey = Hidden, Body = "hidden" }],
+    };
+
+    // Pins ModerationQuery.RunAsync, the Editor case on a repository that is not page-scoped (0.1.0 filtered rows per page).
+    [Fact]
+    public async Task An_editor_on_a_plain_repository_gets_the_rows_they_can_browse_and_zero_counts()
+    {
+        var repository = WithRows();
+
+        var (rows, counts) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Editor, OnlyPage);
+
+        Assert.Equal(["visible"], rows.Select(r => r.Body));
+        Assert.Equal(new CommentCounts(0, 0, 0), counts);
+    }
+
+    // Pins the try/catch in ModerationQuery.Safe: a failed check drops the row.
+    [Fact]
+    public async Task A_check_that_throws_drops_the_row()
+    {
+        var repository = WithRows();
+
+        var (rows, _) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Editor,
+            key => key == Page ? throw new InvalidOperationException("permission service down") : Task.FromResult(true));
+
+        Assert.Equal(["hidden"], rows.Select(r => r.Body));
+    }
+
+    // Pins the Administrator case: only an administrator gets the unfiltered plain list and the sitewide counts.
+    [Fact]
+    public async Task An_administrator_on_a_plain_repository_gets_everything_without_the_check()
+    {
+        var repository = WithRows();
+
+        var (rows, counts) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Administrator,
+            _ => throw new InvalidOperationException("must not be called"));
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal(5, counts.Pending);
+    }
+
+    // Pins the default arm: no user gets nothing and the repository is not read.
+    [Fact]
+    public async Task No_user_gets_nothing()
+    {
+        var repository = WithRows();
+
+        var (rows, counts) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.None, _ => Task.FromResult(true));
 
         Assert.Empty(rows);
         Assert.Equal(new CommentCounts(0, 0, 0), counts);
         Assert.Equal(0, repository.Calls);
     }
 
+    // Pins the Editor case on a scoped repository: only the browsable keys reach the scoped query, the plain list is not used.
     [Fact]
-    public void A_repository_without_the_scoped_interface_still_serves_administrators()
+    public async Task An_editor_on_a_scoped_repository_gets_the_scoped_query_over_browsable_pages()
     {
-        var repository = new PlainFake();
+        var repository = new ScopedFake { Keys = [Page, Hidden] };
 
-        ModerationQuery.Run(repository, CommentStatus.Pending, 0, 50, null);
+        await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Editor, OnlyPage);
 
-        Assert.Equal(2, repository.Calls);
+        Assert.Equal([Page], repository.ScopedListKeys);
+        Assert.Equal(0, repository.Calls);
     }
 
+    // Pins CommentSubmission.cs:47, tokens.Age(input.Token, input.ContentKey). The old Age(input.Token) can not read a page-bound token.
     [Fact]
-    public void A_scoped_repository_gets_the_scoped_query()
+    public void A_page_bound_token_that_is_too_young_is_rejected_as_too_fast()
     {
-        var repository = new ScopedFake();
-        Guid[] allowed = [Page];
+        var time = new FakeTimeProvider(new DateTimeOffset(2026, 11, 7, 12, 0, 0, TimeSpan.Zero));
+        var tokens = new FormToken(new EphemeralDataProtectionProvider(), time);
+        var submission = new CommentSubmission(new ScopedFake(), new RateLimiter(time), tokens,
+            DispatchProxy.Create<IContentService, SubmissionTests.PublishedContentProxy>(), Options.Create(new CommentsOptions()), time, new AllowAllSpamCheck());
+        string token = tokens.Issue(Page);
+        time.Advance(TimeSpan.FromSeconds(1));
 
-        ModerationQuery.Run(repository, CommentStatus.Pending, 0, 50, allowed);
-
-        Assert.Equal(allowed, repository.ScopedListKeys);
+        Assert.Equal(SubmitResult.TooFast, submission.Submit(new CommentInput(Page, "Ana", null, "Hello there", null, token, "1.1.1.1")));
     }
 
     [Fact]
@@ -190,12 +242,13 @@ public class ApiCompatTests
     {
         public int Calls { get; protected set; }
         public int Pending { get; set; }
+        public IReadOnlyList<CommentRow> Rows { get; set; } = [];
         public List<CommentRow> Added { get; } = [];
         public void Add(CommentRow row) => Added.Add(row);
         public IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int skip, int take) => [];
         public int CountApproved(Guid contentKey) => 0;
         public int DeleteForContent(Guid contentKey) => 0;
-        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take) { Calls++; return []; }
+        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take) { Calls++; return Rows; }
         public CommentCounts Counts() { Calls++; return new CommentCounts(Pending, 0, 0); }
         public CommentRow? Get(Guid id) => null;
         public bool SetStatus(Guid id, CommentStatus status) => false;
@@ -211,7 +264,8 @@ public class ApiCompatTests
             return [];
         }
         public CommentCounts Counts(IReadOnlyCollection<Guid> contentKeys) => new(0, 0, 0);
-        public IReadOnlyList<Guid> ContentKeys() => [];
+        public IReadOnlyList<Guid> ContentKeys() => Keys;
+        public IReadOnlyList<Guid> Keys { get; set; } = [];
     }
 
     // CommentsModel

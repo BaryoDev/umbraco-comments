@@ -38,6 +38,8 @@ Each form token works once. A second post with the same token is refused with "T
 
 ### Pending cap
 
+`ICommentRepositoryScoped` is implemented by the built-in repository. A custom `ICommentRepository` is used everywhere else, and the dashboard filters its rows per page (counts show zero for non-administrators).
+
 `MaxPendingPerPage` and `MaxPendingTotal` limit pending comments. Default: none (off). Set them if spam could fill your database. The trade-off: at either cap, new comments are refused with "Comments are paused for review" and nothing is saved until a moderator clears the queue (approve, mark spam or delete rows). `null` means no cap, `0` pauses new comments, negative values fail at startup. Auto-approved comments are not counted.
 
 ### Spam check hook

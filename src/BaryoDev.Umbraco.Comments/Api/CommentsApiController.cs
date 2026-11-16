@@ -44,11 +44,9 @@ public sealed class CommentsApiController(
         take = Math.Clamp(take, 1, MaxTake);
 
         // Rows, counts and total cover only the pages the user can browse. Administrators also see rows whose page is gone.
-        var scoped = repository as ICommentRepositoryScoped;
-        IReadOnlyCollection<Guid>? allowed = await AllowedKeysAsync(scoped);
         var names = new Dictionary<Guid, string?>();
         var items = new List<CommentItem>();
-        var (rows, counts) = ModerationQuery.Run(repository, parsed, skip, take, allowed);
+        var (rows, counts) = await ModerationQuery.RunAsync(repository, parsed, skip, take, AudienceOfUser(), CanSeeAsync);
         foreach (CommentRow r in rows)
         {
             if (!names.TryGetValue(r.ContentKey, out var pageName))
@@ -105,31 +103,16 @@ public sealed class CommentsApiController(
     }
 
     // Null means every page (administrators). Anyone else gets the pages they can browse, or none without a user.
-    // A repository that is not page-scoped can not list pages, so anyone but an administrator gets none.
-    private async Task<IReadOnlyCollection<Guid>?> AllowedKeysAsync(ICommentRepositoryScoped? scoped)
+    private ModerationQuery.Audience AudienceOfUser()
     {
         IUser? user = security.BackOfficeSecurity?.CurrentUser;
         if (user is null)
         {
-            return [];
+            return ModerationQuery.Audience.None;
         }
-        if (user.Groups.Any(g => g.Alias == Constants.Security.AdminGroupAlias))
-        {
-            return null;
-        }
-        if (scoped is null)
-        {
-            return [];
-        }
-        var allowed = new List<Guid>();
-        foreach (Guid key in scoped.ContentKeys())
-        {
-            if (await CanSeeAsync(key))
-            {
-                allowed.Add(key);
-            }
-        }
-        return allowed;
+        return user.Groups.Any(g => g.Alias == Constants.Security.AdminGroupAlias)
+            ? ModerationQuery.Audience.Administrator
+            : ModerationQuery.Audience.Editor;
     }
 
     // Fails closed: no user, no access. Rows of deleted pages have no node to check, so only administrators see them.
