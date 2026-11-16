@@ -41,7 +41,7 @@ Management API (backoffice token, content section access), under `/umbraco/manag
 - Zero-width characters are stripped before length checks.
 - A failed post (including an antiforgery failure) redirects back with an error code and nothing typed goes into TempData (cookie TempData overflows the header limit). The form script keeps the draft in sessionStorage in that tab.
 - Form tokens are single use. A nonce in the token is kept in memory (per instance, at most 50,000) until the token expires. A full table of live tokens refuses new posts.
-- Pending cap per page and in total (`MaxPendingPerPage`, `MaxPendingTotal`). At a cap new posts are refused and nothing is written.
+- Opt-in pending cap per page and in total (`MaxPendingPerPage`, `MaxPendingTotal`, off by default). At a cap new posts are refused and nothing is written.
 - `ICommentSpamCheck` runs after validation and before save and can allow, mark as spam or reject.
 - Optional retention (`SpamRetentionDays`, `PendingRetentionDays`) deletes old spam and pending rows hourly. Approved rows are never deleted by age.
 - Deleting a page deletes its comments.

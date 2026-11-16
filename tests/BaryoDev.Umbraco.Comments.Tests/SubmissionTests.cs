@@ -574,13 +574,13 @@ public class SubmissionTests
     }
 
     [Fact]
-    public void A_null_cap_means_no_cap_and_the_defaults_are_set()
+    public void The_caps_are_off_by_default_and_many_pending_comments_are_not_paused()
     {
         var defaults = new CommentsOptions();
-        Assert.Equal(100, defaults.MaxPendingPerPage);
-        Assert.Equal(5000, defaults.MaxPendingTotal);
+        Assert.Null(defaults.MaxPendingPerPage);
+        Assert.Null(defaults.MaxPendingTotal);
 
-        var rig = new Rig(new CommentsOptions { MaxPendingPerPage = null, MaxPendingTotal = null }, pagePublished: true);
+        var rig = new Rig(new CommentsOptions(), pagePublished: true);
         rig.Repository.PendingForPage = 1_000_000;
         rig.Repository.PendingTotal = 1_000_000;
         Assert.Equal(SubmitResult.Pending, rig.Send());

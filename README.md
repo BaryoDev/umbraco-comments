@@ -38,7 +38,7 @@ Each form token works once. A second post with the same token is refused with "T
 
 ### Pending cap
 
-`MaxPendingPerPage` (default 100) and `MaxPendingTotal` (default 5000) limit pending comments. At either cap, new comments are refused with "Comments are paused for review" and nothing is saved. Approve, mark spam or delete rows to make room. `null` means no cap, `0` pauses new comments, negative values fail at startup. Auto-approved comments are not counted.
+`MaxPendingPerPage` and `MaxPendingTotal` limit pending comments. Default: none (off). Set them if spam could fill your database. The trade-off: at either cap, new comments are refused with "Comments are paused for review" and nothing is saved until a moderator clears the queue (approve, mark spam or delete rows). `null` means no cap, `0` pauses new comments, negative values fail at startup. Auto-approved comments are not counted.
 
 ### Spam check hook
 
@@ -74,8 +74,8 @@ Section `BaryoDev:Comments` in appsettings:
       "RateLimitMaxPosts": 5,
       "RateLimitWindowMinutes": 10,
       "PageSize": 50,
-      "MaxPendingPerPage": 100,
-      "MaxPendingTotal": 5000,
+      "MaxPendingPerPage": null,
+      "MaxPendingTotal": null,
       "SpamRetentionDays": null,
       "PendingRetentionDays": null
     }
