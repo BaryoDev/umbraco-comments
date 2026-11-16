@@ -31,6 +31,32 @@ public sealed class FormToken
         _maxUsed = maxUsedTokens;
     }
 
+    /// <summary>The 0.1.0 form. The token is not bound to a page, so <see cref="Use"/> and the submit path refuse it.</summary>
+    [Obsolete("Use Issue(Guid contentKey). A token from this overload is not bound to a page and is refused on submit.")]
+    public string Issue() => _protector.Protect(_time.GetUtcNow().ToUnixTimeSeconds().ToString());
+
+    /// <summary>
+    /// The 0.1.0 form. Reads only tokens made by the parameterless <see cref="Issue()"/>. Returns null for a token made by
+    /// <see cref="Issue(Guid)"/>, because it can not be checked against a page here, so it never passes a check on its own.
+    /// </summary>
+    [Obsolete("Use Age(string, Guid contentKey).")]
+    public TimeSpan? Age(string? token)
+    {
+        if (string.IsNullOrEmpty(token))
+        {
+            return null;
+        }
+        try
+        {
+            long issued = long.Parse(_protector.Unprotect(token));
+            return _time.GetUtcNow() - DateTimeOffset.FromUnixTimeSeconds(issued);
+        }
+        catch (Exception e) when (e is FormatException or OverflowException or ArgumentOutOfRangeException or CryptographicException)
+        {
+            return null;
+        }
+    }
+
     public string Issue(Guid contentKey) =>
         _protector.Protect(
             _time.GetUtcNow().ToUnixTimeSeconds() + "|" + contentKey.ToString("N") + "|" + Convert.ToHexString(RandomNumberGenerator.GetBytes(16)));

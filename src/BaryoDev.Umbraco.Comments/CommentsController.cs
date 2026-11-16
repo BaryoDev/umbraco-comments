@@ -9,6 +9,13 @@ namespace BaryoDev.Umbraco.Comments;
 [Route("baryo-comments")]
 public sealed class CommentsController(CommentSubmission submission, IAntiforgery antiforgery) : Controller
 {
+    [Obsolete("The draft is kept in sessionStorage now. Nothing reads this key.")]
+    public const string DraftName = "bdc.name";
+    [Obsolete("The draft is kept in sessionStorage now. Nothing reads this key.")]
+    public const string DraftEmail = "bdc.email";
+    [Obsolete("The draft is kept in sessionStorage now. Nothing reads this key.")]
+    public const string DraftBody = "bdc.body";
+
     /// <summary>Largest accepted post. A valid comment is a few KB at most. 4000 CJK characters URL-encode to about 36 KB.</summary>
     public const int MaxRequestBytes = 65_536;
     public const int MaxFieldBytes = 49_152;

@@ -17,7 +17,11 @@ namespace BaryoDev.Umbraco.Comments.Api;
 
 public sealed record CommentItem(Guid Id, Guid ContentKey, string? PageName, string Name, string? Email, string Body, string Status, DateTime CreatedUtc);
 
-public sealed record CommentList(IReadOnlyList<CommentItem> Items, CommentCounts Counts, int Total);
+public sealed record CommentList(IReadOnlyList<CommentItem> Items, CommentCounts Counts, int Total)
+{
+    /// <summary>True when a next page may exist. Needed because counts are zero for editors on a custom repository.</summary>
+    public bool HasMore { get; init; }
+}
 
 /// <summary>Moderation queue. Content section access plus Browse on each comment's page, checked on the server.</summary>
 [ApiVersion("1.0")]
@@ -44,10 +48,10 @@ public sealed class CommentsApiController(
         take = Math.Clamp(take, 1, MaxTake);
 
         // Rows, counts and total cover only the pages the user can browse. Administrators also see rows whose page is gone.
-        IReadOnlyCollection<Guid>? allowed = await AllowedKeysAsync();
         var names = new Dictionary<Guid, string?>();
         var items = new List<CommentItem>();
-        foreach (CommentRow r in repository.List(parsed, skip, take, allowed))
+        var (rows, counts, hasMore) = await ModerationQuery.RunAsync(repository, parsed, skip, take, AudienceOfUser(), CanSeeAsync);
+        foreach (CommentRow r in rows)
         {
             if (!names.TryGetValue(r.ContentKey, out var pageName))
             {
@@ -57,9 +61,8 @@ public sealed class CommentsApiController(
             items.Add(new CommentItem(r.Id, r.ContentKey, pageName, r.Name, r.Email, r.Body,
                 ((CommentStatus)r.Status).ToString().ToLowerInvariant(), DateTime.SpecifyKind(r.CreatedUtc, DateTimeKind.Utc)));
         }
-        var counts = repository.Counts(allowed);
         int total = parsed switch { CommentStatus.Pending => counts.Pending, CommentStatus.Approved => counts.Approved, _ => counts.Spam };
-        return Ok(new CommentList(items, counts, total));
+        return Ok(new CommentList(items, counts, total) { HasMore = hasMore });
     }
 
     [HttpPost("{id:guid}/approve")]
@@ -104,27 +107,8 @@ public sealed class CommentsApiController(
     }
 
     // Null means every page (administrators). Anyone else gets the pages they can browse, or none without a user.
-    private async Task<IReadOnlyCollection<Guid>?> AllowedKeysAsync()
-    {
-        IUser? user = security.BackOfficeSecurity?.CurrentUser;
-        if (user is null)
-        {
-            return [];
-        }
-        if (user.Groups.Any(g => g.Alias == Constants.Security.AdminGroupAlias))
-        {
-            return null;
-        }
-        var allowed = new List<Guid>();
-        foreach (Guid key in repository.ContentKeys())
-        {
-            if (await CanSeeAsync(key))
-            {
-                allowed.Add(key);
-            }
-        }
-        return allowed;
-    }
+    private ModerationQuery.Audience AudienceOfUser() =>
+        ModerationQuery.AudienceOf(security.BackOfficeSecurity?.CurrentUser?.Groups.Select(g => g.Alias));
 
     // Fails closed: no user, no access. Rows of deleted pages have no node to check, so only administrators see them.
     private readonly Dictionary<Guid, bool> _seen = [];

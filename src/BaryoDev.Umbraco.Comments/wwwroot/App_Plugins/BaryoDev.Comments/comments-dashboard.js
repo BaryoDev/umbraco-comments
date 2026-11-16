@@ -80,8 +80,9 @@ class CommentsDashboard extends Base {
       this.#render();
       return;
     }
-    const total = (this.#data?.total ?? 1) - 1;
-    if (this.#skip >= total && this.#skip > 0) this.#skip = Math.max(0, this.#skip - PAGE);
+    const unknownTotal = (this.#data?.total ?? 0) === 0;
+    const left = unknownTotal ? (this.#data?.items?.length ?? 1) - 1 : (this.#data?.total ?? 1) - 1;
+    if (this.#skip > 0 && (unknownTotal ? left <= 0 && !this.#data?.hasMore : this.#skip >= left)) this.#skip = Math.max(0, this.#skip - PAGE);
     await this.#load();
   }
 
@@ -90,6 +91,11 @@ class CommentsDashboard extends Base {
     const countOf = (key) => counts[key] ?? 0;
     const items = this.#data?.items ?? [];
     const total = this.#data?.total ?? 0;
+    const hasMore = this.#data?.hasMore ?? this.#skip + PAGE < total;
+    // Counts are zero for an editor on a custom repository, so show the range without a total then.
+    const range = total === 0
+      ? (items.length > 0 || hasMore ? `${this.#skip + 1} to ${this.#skip + items.length}` : "0 to 0 of 0")
+      : `${this.#skip + 1} to ${Math.min(this.#skip + PAGE, total)} of ${total}`;
     const when = (d) => new Date(d).toLocaleString();
     this.innerHTML = `
       <link rel="stylesheet" href="${BASE}/brand.css" />
@@ -116,8 +122,8 @@ class CommentsDashboard extends Base {
         </div>
         <div class="bdc-actions">
           <button class="bdc-btn" data-page="-1" ${this.#skip === 0 || this.#busy ? "disabled" : ""}>Previous</button>
-          <span class="bdc-note">${total === 0 ? 0 : this.#skip + 1} to ${Math.min(this.#skip + PAGE, total)} of ${total}</span>
-          <button class="bdc-btn" data-page="1" ${this.#skip + PAGE >= total || this.#busy ? "disabled" : ""}>Next</button>
+          <span class="bdc-note">${range}</span>
+          <button class="bdc-btn" data-page="1" ${!hasMore || this.#busy ? "disabled" : ""}>Next</button>
         </div>
       </div>`;
     this.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {

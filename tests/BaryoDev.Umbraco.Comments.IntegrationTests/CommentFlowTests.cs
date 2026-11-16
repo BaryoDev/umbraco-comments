@@ -38,11 +38,13 @@ namespace BaryoDev.Umbraco.Comments.IntegrationTests;
 [UmbracoTest(Database = UmbracoTestOptions.Database.NewSchemaPerTest)]
 public class CommentFlowTests : UmbracoIntegrationTest
 {
-    private ICommentRepository Comments => GetRequiredService<ICommentRepository>();
+    private ICommentRepositoryScoped Comments => GetRequiredService<ICommentRepositoryScoped>();
 
     protected override void CustomTestSetup(IUmbracoBuilder builder)
     {
-        builder.Services.TryAddSingleton<ICommentRepository, CommentRepository>();
+        builder.Services.TryAddSingleton<CommentRepository>();
+        builder.Services.TryAddSingleton<ICommentRepository>(sp => sp.GetRequiredService<CommentRepository>());
+        builder.Services.TryAddSingleton<ICommentRepositoryScoped>(sp => sp.GetRequiredService<CommentRepository>());
         builder.AddNotificationHandler<ContentDeletedNotification, CommentsContentDeletedHandler>();
     }
 

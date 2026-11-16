@@ -2,7 +2,7 @@ using Umbraco.Cms.Infrastructure.Scoping;
 
 namespace BaryoDev.Umbraco.Comments.Data;
 
-public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRepository
+public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRepositoryScoped
 {
     public void Add(CommentRow row)
     {
@@ -38,14 +38,16 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
     // SQL Server allows about 2,100 parameters, so a key list goes in batches.
     internal const int KeyBatch = 1000;
 
-    public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid>? contentKeys = null)
+    public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take)
     {
         using var scope = scopeProvider.CreateScope(autoComplete: true);
-        if (contentKeys is null)
-        {
-            return scope.Database.SkipTake<CommentRow>(skip, take,
-                "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC, Id DESC", (int)status);
-        }
+        return scope.Database.SkipTake<CommentRow>(skip, take,
+            "SELECT * FROM baryoComment WHERE Status = @0 ORDER BY CreatedUtc DESC, Id DESC", (int)status);
+    }
+
+    public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid> contentKeys)
+    {
+        using var scope = scopeProvider.CreateScope(autoComplete: true);
 
         // Each batch returns its own first skip+take rows in the database's order. The batches are joined in key order and
         // sorted by CreatedUtc alone (a stable sort), so ties keep one fixed order: batch, then the database's order inside it.
@@ -59,13 +61,18 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
         return merged.OrderByDescending(r => r.CreatedUtc).Skip(skip).Take(take).ToList();
     }
 
-    public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null)
+    public CommentCounts Counts()
     {
         using var scope = scopeProvider.CreateScope(autoComplete: true);
-        int Count(CommentStatus s) => contentKeys is null
-            ? scope.Database.ExecuteScalar<int>("SELECT COUNT(*) FROM baryoComment WHERE Status = @0", (int)s)
-            : contentKeys.Chunk(KeyBatch).Sum(batch => scope.Database.ExecuteScalar<int>(
-                "SELECT COUNT(*) FROM baryoComment WHERE Status = @0 AND ContentKey IN (@1)", (int)s, batch));
+        int Count(CommentStatus s) => scope.Database.ExecuteScalar<int>("SELECT COUNT(*) FROM baryoComment WHERE Status = @0", (int)s);
+        return new CommentCounts(Count(CommentStatus.Pending), Count(CommentStatus.Approved), Count(CommentStatus.Spam));
+    }
+
+    public CommentCounts Counts(IReadOnlyCollection<Guid> contentKeys)
+    {
+        using var scope = scopeProvider.CreateScope(autoComplete: true);
+        int Count(CommentStatus s) => contentKeys.Chunk(KeyBatch).Sum(batch => scope.Database.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM baryoComment WHERE Status = @0 AND ContentKey IN (@1)", (int)s, batch));
         return new CommentCounts(Count(CommentStatus.Pending), Count(CommentStatus.Approved), Count(CommentStatus.Spam));
     }
 

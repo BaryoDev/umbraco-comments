@@ -8,12 +8,23 @@ public interface ICommentRepository
     IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int skip, int take);
     int CountApproved(Guid contentKey);
     int DeleteForContent(Guid contentKey);
-    /// <summary>Rows of one status, newest first. A non-null <paramref name="contentKeys"/> limits the rows to those pages.</summary>
-    IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid>? contentKeys = null);
-    /// <summary>Counts per status. A non-null <paramref name="contentKeys"/> limits the count to those pages.</summary>
-    CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null);
-    IReadOnlyList<Guid> ContentKeys();
+    IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take);
+    CommentCounts Counts();
     CommentRow? Get(Guid id);
     bool SetStatus(Guid id, CommentStatus status);
     bool Delete(Guid id);
+}
+
+/// <summary>
+/// Page-scoped queries, used by the dashboard for editors who can browse only some pages and by the per-page pending cap.
+/// A repository that does not implement this gets no scoped queries: an editor sees nothing, and the per-page cap uses the total.
+/// </summary>
+public interface ICommentRepositoryScoped : ICommentRepository
+{
+    /// <summary>Rows of one status, newest first, limited to the given pages.</summary>
+    IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid> contentKeys);
+    /// <summary>Counts per status, limited to the given pages.</summary>
+    CommentCounts Counts(IReadOnlyCollection<Guid> contentKeys);
+    /// <summary>Every page key that has at least one comment.</summary>
+    IReadOnlyList<Guid> ContentKeys();
 }
