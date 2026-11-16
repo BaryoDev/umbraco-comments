@@ -191,6 +191,37 @@ public class ApiCompatTests
         Assert.False(last.HasMore);
     }
 
+    // Pins the HasMore line in the scoped Editor arm: skip + take < the scoped total.
+    [Fact]
+    public async Task A_scoped_editor_gets_HasMore_from_the_scoped_total()
+    {
+        var more = await ModerationQuery.RunAsync(new ScopedFake { Keys = [Page], ScopedPending = 3 }, CommentStatus.Pending, 0, 2, ModerationQuery.Audience.Editor, OnlyPage);
+        var last = await ModerationQuery.RunAsync(new ScopedFake { Keys = [Page], ScopedPending = 3 }, CommentStatus.Pending, 2, 2, ModerationQuery.Audience.Editor, OnlyPage);
+
+        Assert.True(more.HasMore);
+        Assert.False(last.HasMore);
+    }
+
+    // Pins the boundary (skip + take == total gives false) and the status mapping in Total, using Approved.
+    [Fact]
+    public async Task An_administrator_on_the_exact_last_page_has_no_more_for_a_non_pending_tab()
+    {
+        var exact = await ModerationQuery.RunAsync(new PlainFake { Pending = 99, Approved = 4 }, CommentStatus.Approved, 2, 2, ModerationQuery.Audience.Administrator, OnlyPage);
+        var short1 = await ModerationQuery.RunAsync(new PlainFake { Pending = 0, Approved = 5 }, CommentStatus.Approved, 2, 2, ModerationQuery.Audience.Administrator, OnlyPage);
+
+        Assert.False(exact.HasMore);
+        Assert.True(short1.HasMore);
+    }
+
+    // Pins the (long) cast: int.MaxValue + take must not wrap to a negative and read as "more".
+    [Fact]
+    public async Task A_huge_skip_does_not_overflow_into_HasMore()
+    {
+        var result = await ModerationQuery.RunAsync(new PlainFake { Pending = 3 }, CommentStatus.Pending, int.MaxValue, 50, ModerationQuery.Audience.Administrator, OnlyPage);
+
+        Assert.False(result.HasMore);
+    }
+
     // Pins ModerationQuery.AudienceOf.
     [Fact]
     public void AudienceOf_maps_no_user_to_None()
@@ -307,6 +338,7 @@ public class ApiCompatTests
     {
         public int Calls { get; protected set; }
         public int Pending { get; set; }
+        public int Approved { get; set; }
         public IReadOnlyList<CommentRow> Rows { get; set; } = [];
         public List<CommentRow> Added { get; } = [];
         public void Add(CommentRow row) => Added.Add(row);
@@ -314,7 +346,7 @@ public class ApiCompatTests
         public int CountApproved(Guid contentKey) => 0;
         public int DeleteForContent(Guid contentKey) => 0;
         public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take) { Calls++; return Rows; }
-        public CommentCounts Counts() { Calls++; return new CommentCounts(Pending, 0, 0); }
+        public CommentCounts Counts() { Calls++; return new CommentCounts(Pending, Approved, 0); }
         public CommentRow? Get(Guid id) => null;
         public bool SetStatus(Guid id, CommentStatus status) => false;
         public bool Delete(Guid id) => false;
@@ -328,7 +360,8 @@ public class ApiCompatTests
             ScopedListKeys = contentKeys;
             return [];
         }
-        public CommentCounts Counts(IReadOnlyCollection<Guid> contentKeys) => new(0, 0, 0);
+        public int ScopedPending { get; set; }
+        public CommentCounts Counts(IReadOnlyCollection<Guid> contentKeys) => new(ScopedPending, 0, 0);
         public IReadOnlyList<Guid> ContentKeys() => Keys;
         public IReadOnlyList<Guid> Keys { get; set; } = [];
     }

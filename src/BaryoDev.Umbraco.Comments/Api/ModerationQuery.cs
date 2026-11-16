@@ -31,7 +31,7 @@ internal static class ModerationQuery
         {
             case Audience.Administrator:
                 CommentCounts all = repository.Counts();
-                return (repository.List(status, skip, take), all, skip + take < Total(all, status));
+                return (repository.List(status, skip, take), all, (long)skip + take < Total(all, status));
             case Audience.Editor when repository is ICommentRepositoryScoped scoped:
                 var allowed = new List<Guid>();
                 foreach (Guid key in scoped.ContentKeys())
@@ -42,7 +42,7 @@ internal static class ModerationQuery
                     }
                 }
                 CommentCounts mine = scoped.Counts(allowed);
-                return (scoped.List(status, skip, take, allowed), mine, skip + take < Total(mine, status));
+                return (scoped.List(status, skip, take, allowed), mine, (long)skip + take < Total(mine, status));
             case Audience.Editor:
                 var visible = new List<CommentRow>();
                 IReadOnlyList<CommentRow> page = repository.List(status, skip, take);
