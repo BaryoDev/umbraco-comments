@@ -26,7 +26,9 @@ public sealed class CommentsComposer : IComposer
         services.AddSingleton<CommentsRetention>();
         services.AddHostedService<CommentsRetentionService>();
         services.TryAddSingleton(TimeProvider.System);
-        services.AddSingleton<ICommentRepository, CommentRepository>();
+        services.AddSingleton<CommentRepository>();
+        services.AddSingleton<ICommentRepository>(sp => sp.GetRequiredService<CommentRepository>());
+        services.AddSingleton<ICommentRepositoryScoped>(sp => sp.GetRequiredService<CommentRepository>());
         services.AddSingleton<RateLimiter>();
         services.AddSingleton<FormToken>();
         services.AddTransient<CommentSubmission>();

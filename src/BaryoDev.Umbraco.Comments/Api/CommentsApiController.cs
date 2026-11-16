@@ -44,10 +44,12 @@ public sealed class CommentsApiController(
         take = Math.Clamp(take, 1, MaxTake);
 
         // Rows, counts and total cover only the pages the user can browse. Administrators also see rows whose page is gone.
-        IReadOnlyCollection<Guid>? allowed = await AllowedKeysAsync();
+        var scoped = repository as ICommentRepositoryScoped;
+        IReadOnlyCollection<Guid>? allowed = await AllowedKeysAsync(scoped);
         var names = new Dictionary<Guid, string?>();
         var items = new List<CommentItem>();
-        foreach (CommentRow r in repository.List(parsed, skip, take, allowed))
+        var (rows, counts) = ModerationQuery.Run(repository, parsed, skip, take, allowed);
+        foreach (CommentRow r in rows)
         {
             if (!names.TryGetValue(r.ContentKey, out var pageName))
             {
@@ -57,7 +59,6 @@ public sealed class CommentsApiController(
             items.Add(new CommentItem(r.Id, r.ContentKey, pageName, r.Name, r.Email, r.Body,
                 ((CommentStatus)r.Status).ToString().ToLowerInvariant(), DateTime.SpecifyKind(r.CreatedUtc, DateTimeKind.Utc)));
         }
-        var counts = repository.Counts(allowed);
         int total = parsed switch { CommentStatus.Pending => counts.Pending, CommentStatus.Approved => counts.Approved, _ => counts.Spam };
         return Ok(new CommentList(items, counts, total));
     }
@@ -104,7 +105,8 @@ public sealed class CommentsApiController(
     }
 
     // Null means every page (administrators). Anyone else gets the pages they can browse, or none without a user.
-    private async Task<IReadOnlyCollection<Guid>?> AllowedKeysAsync()
+    // A repository that is not page-scoped can not list pages, so anyone but an administrator gets none.
+    private async Task<IReadOnlyCollection<Guid>?> AllowedKeysAsync(ICommentRepositoryScoped? scoped)
     {
         IUser? user = security.BackOfficeSecurity?.CurrentUser;
         if (user is null)
@@ -115,8 +117,12 @@ public sealed class CommentsApiController(
         {
             return null;
         }
+        if (scoped is null)
+        {
+            return [];
+        }
         var allowed = new List<Guid>();
-        foreach (Guid key in repository.ContentKeys())
+        foreach (Guid key in scoped.ContentKeys())
         {
             if (await CanSeeAsync(key))
             {

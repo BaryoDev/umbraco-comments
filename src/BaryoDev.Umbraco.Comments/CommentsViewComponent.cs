@@ -20,7 +20,56 @@ public sealed record CommentsModel(
     bool RequireEmail,
     int MaxNameLength,
     int MaxEmailLength,
-    int MaxBodyLength);
+    int MaxBodyLength)
+{
+    /// <summary>The 0.1.0 constructor. The three draft values are ignored.</summary>
+    [Obsolete("The draft lives in sessionStorage now. Use the constructor without the draft values.")]
+    public CommentsModel(
+        Guid ContentKey, string ReturnUrl, IReadOnlyList<CommentView> Comments, int Total, string? LaterUrl, string? EarlierUrl,
+        string DraftName, string DraftEmail, string DraftBody,
+        string FormToken, string? Notice, bool IsError, bool RequireEmail, int MaxNameLength, int MaxEmailLength, int MaxBodyLength)
+        : this(ContentKey, ReturnUrl, Comments, Total, LaterUrl, EarlierUrl, FormToken, Notice, IsError, RequireEmail,
+            MaxNameLength, MaxEmailLength, MaxBodyLength)
+    {
+    }
+
+    /// <summary>The 0.1.0 deconstruction. The three draft values are empty.</summary>
+    [Obsolete("The draft lives in sessionStorage now. Use the deconstruction without the draft values.")]
+    public void Deconstruct(
+        out Guid ContentKey, out string ReturnUrl, out IReadOnlyList<CommentView> Comments, out int Total, out string? LaterUrl, out string? EarlierUrl,
+        out string DraftName, out string DraftEmail, out string DraftBody,
+        out string FormToken, out string? Notice, out bool IsError, out bool RequireEmail, out int MaxNameLength, out int MaxEmailLength, out int MaxBodyLength)
+    {
+        ContentKey = this.ContentKey;
+        ReturnUrl = this.ReturnUrl;
+        Comments = this.Comments;
+        Total = this.Total;
+        LaterUrl = this.LaterUrl;
+        EarlierUrl = this.EarlierUrl;
+        DraftName = string.Empty;
+        DraftEmail = string.Empty;
+        DraftBody = string.Empty;
+        FormToken = this.FormToken;
+        Notice = this.Notice;
+        IsError = this.IsError;
+        RequireEmail = this.RequireEmail;
+        MaxNameLength = this.MaxNameLength;
+        MaxEmailLength = this.MaxEmailLength;
+        MaxBodyLength = this.MaxBodyLength;
+    }
+
+    /// <summary>Always empty. The draft lives in the visitor's sessionStorage.</summary>
+    [Obsolete("Always empty. The draft lives in sessionStorage now.")]
+    public string DraftName { get; init; } = string.Empty;
+
+    /// <summary>Always empty. The draft lives in the visitor's sessionStorage.</summary>
+    [Obsolete("Always empty. The draft lives in sessionStorage now.")]
+    public string DraftEmail { get; init; } = string.Empty;
+
+    /// <summary>Always empty. The draft lives in the visitor's sessionStorage.</summary>
+    [Obsolete("Always empty. The draft lives in sessionStorage now.")]
+    public string DraftBody { get; init; } = string.Empty;
+}
 
 /// <summary>Usage: @await Component.InvokeAsync("BaryoComments", new { contentKey = Model.Key })</summary>
 [ViewComponent(Name = "BaryoComments")]

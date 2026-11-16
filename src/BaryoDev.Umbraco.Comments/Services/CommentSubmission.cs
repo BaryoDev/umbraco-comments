@@ -154,7 +154,13 @@ public sealed class CommentSubmission(
         {
             return true;
         }
-        return o.MaxPendingPerPage is int perPage && repository.Counts([contentKey]).Pending >= perPage;
+        if (o.MaxPendingPerPage is not int perPage)
+        {
+            return false;
+        }
+        // A repository without page-scoped counts can not give the per-page figure. The total is an upper bound, so this errs towards pausing.
+        int pending = repository is ICommentRepositoryScoped scoped ? scoped.Counts([contentKey]).Pending : repository.Counts().Pending;
+        return pending >= perPage;
     }
 
     private static bool IsEmail(string value, int max)

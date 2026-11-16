@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Breaking
+
+- New pending caps (`MaxPendingPerPage` 100, `MaxPendingTotal` 5000 by default) refuse new comments at the cap. Set `null` for no cap.
+- Forms open during the upgrade are rejected once, because form tokens now carry a page key and a random id.
+- A custom `ICommentRepository` no longer gets the page-scoped dashboard list. Implement the new `ICommentRepositoryScoped` to get it. Without it, editors who are not administrators see nothing in the dashboard, and the per-page pending cap uses the total pending count.
+
+Every 0.1.0 public member is kept. The ones whose behaviour changed are marked `[Obsolete]`: `FormToken.Issue()` and `Age(string?)` (a token from `Issue()` is not bound to a page and is refused on submit), `CommentsModel.DraftName`, `DraftEmail`, `DraftBody` and the 0.1.0 constructor (always empty now), and `CommentsController.DraftName`, `DraftEmail`, `DraftBody`. `ICommentRepository` has its 0.1.0 members again, and the page-scoped members live in `ICommentRepositoryScoped`.
+
+### Changes
+
 - A failed post no longer puts the typed text into TempData. The default cookie TempData provider turned a long non-ASCII post into about 35 KB of cookies, and the next request got a 431. The draft is kept in sessionStorage in the visitor's tab instead, by a script file (no inline script, so a strict CSP does not block it).
 - The form token is bound to the page it was issued for.
 - Form tokens are single use, per server instance, with a bounded in-memory table. A token is released again when nothing was saved (paused by a cap, rejected or failed by the spam hook, failed save), so the visitor can resend the same form. Tokens now carry a random id, so a form open during the upgrade is rejected once.

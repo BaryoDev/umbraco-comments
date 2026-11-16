@@ -32,7 +32,7 @@ public class SubmissionTests
             targetMethod!.Name == "get_Published" ? true : null;
     }
 
-    private sealed class RecordingRepository : ICommentRepository
+    private sealed class RecordingRepository : ICommentRepositoryScoped
     {
         public List<CommentRow> Added { get; } = [];
 
@@ -44,13 +44,17 @@ public class SubmissionTests
 
         public int DeleteForContent(Guid contentKey) => 0;
 
-        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid>? contentKeys = null) => [];
+        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take) => [];
+
+        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid> contentKeys) => [];
 
         public int PendingTotal { get; set; }
 
         public int PendingForPage { get; set; }
 
-        public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null) => new(contentKeys is null ? PendingTotal : PendingForPage, 0, 0);
+        public CommentCounts Counts() => new(PendingTotal, 0, 0);
+
+        public CommentCounts Counts(IReadOnlyCollection<Guid> contentKeys) => new(PendingForPage, 0, 0);
 
         public IReadOnlyList<Guid> ContentKeys() => [];
 
@@ -413,9 +417,8 @@ public class SubmissionTests
         public IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int skip, int take) => [];
         public int CountApproved(Guid contentKey) => 0;
         public int DeleteForContent(Guid contentKey) => 0;
-        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid>? contentKeys = null) => [];
-        public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null) => new(0, 0, 0);
-        public IReadOnlyList<Guid> ContentKeys() => [];
+        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take) => [];
+        public CommentCounts Counts() => new(0, 0, 0);
         public CommentRow? Get(Guid id) => null;
         public bool SetStatus(Guid id, CommentStatus status) => false;
         public bool Delete(Guid id) => false;
