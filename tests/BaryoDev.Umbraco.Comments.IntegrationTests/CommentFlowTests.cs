@@ -106,6 +106,39 @@ public class CommentFlowTests : UmbracoIntegrationTest
     private static List<CommentItem> Items(IActionResult result) => ((CommentList)((OkObjectResult)result).Value!).Items.ToList();
 
     [Test]
+    public void Retention_deletes_only_old_spam_and_old_pending()
+    {
+        var page = Guid.NewGuid();
+        var now = new DateTime(2026, 11, 16, 12, 0, 0, DateTimeKind.Utc);
+        CommentRow At(CommentStatus status, int daysOld, string name)
+        {
+            var row = Row(page, status, 0, name);
+            row.CreatedUtc = now.AddDays(-daysOld);
+            return row;
+        }
+
+        Comments.Add(At(CommentStatus.Spam, 100, "old-spam"));
+        Comments.Add(At(CommentStatus.Pending, 100, "old-pending"));
+        Comments.Add(At(CommentStatus.Approved, 100, "old-approved"));
+        Comments.Add(At(CommentStatus.Spam, 1, "new-spam"));
+
+        var retention = new CommentsRetention(
+            new CommentRetentionStore(GetRequiredService<IScopeProvider>()),
+            Options.Create(new CommentsOptions { SpamRetentionDays = 30, PendingRetentionDays = 30 }),
+            new FixedTime(now));
+
+        Assert.That(retention.RunOnce(), Is.EqualTo(2));
+        Assert.That(Comments.List(CommentStatus.Spam, 0, 10).Select(r => r.Name), Is.EqualTo(new[] { "new-spam" }));
+        Assert.That(Comments.List(CommentStatus.Pending, 0, 10), Is.Empty);
+        Assert.That(Comments.List(CommentStatus.Approved, 0, 10).Select(r => r.Name), Is.EqualTo(new[] { "old-approved" }));
+    }
+
+    private sealed class FixedTime(DateTime utc) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => new(utc, TimeSpan.Zero);
+    }
+
+    [Test]
     public void Moderation_api_requires_content_section_access()
     {
         var authorize = typeof(CommentsApiController).GetCustomAttributes(typeof(AuthorizeAttribute), inherit: false).Cast<AuthorizeAttribute>().Single();

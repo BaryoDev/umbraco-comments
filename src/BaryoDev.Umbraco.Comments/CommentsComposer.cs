@@ -2,6 +2,7 @@ using BaryoDev.Umbraco.Comments.Data;
 using BaryoDev.Umbraco.Comments.Services;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Composing;
 using Umbraco.Cms.Core.DependencyInjection;
 using Umbraco.Cms.Core.Notifications;
@@ -12,12 +13,22 @@ public sealed class CommentsComposer : IComposer
 {
     public void Compose(IUmbracoBuilder builder)
     {
-        builder.Services.AddOptions<CommentsOptions>().BindConfiguration(CommentsOptions.Section);
-        builder.Services.TryAddSingleton(TimeProvider.System);
-        builder.Services.AddSingleton<ICommentRepository, CommentRepository>();
-        builder.Services.AddSingleton<RateLimiter>();
-        builder.Services.AddSingleton<FormToken>();
-        builder.Services.AddTransient<CommentSubmission>();
+        AddServices(builder.Services);
         builder.AddNotificationHandler<ContentDeletedNotification, CommentsContentDeletedHandler>();
+    }
+
+    internal static void AddServices(IServiceCollection services)
+    {
+        services.AddOptions<CommentsOptions>().BindConfiguration(CommentsOptions.Section).ValidateOnStart();
+        services.AddSingleton<IValidateOptions<CommentsOptions>, CommentsOptionsValidator>();
+        services.TryAddSingleton<ICommentSpamCheck, AllowAllSpamCheck>();
+        services.AddSingleton<ICommentRetentionStore, CommentRetentionStore>();
+        services.AddSingleton<CommentsRetention>();
+        services.AddHostedService<CommentsRetentionService>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<ICommentRepository, CommentRepository>();
+        services.AddSingleton<RateLimiter>();
+        services.AddSingleton<FormToken>();
+        services.AddTransient<CommentSubmission>();
     }
 }

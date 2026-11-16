@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net.Mail;
 using BaryoDev.Umbraco.Comments.Data;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Options;
 using Umbraco.Cms.Core.Services;
 
@@ -8,7 +9,7 @@ namespace BaryoDev.Umbraco.Comments.Services;
 
 public sealed record CommentInput(Guid ContentKey, string? Name, string? Email, string? Body, string? Honeypot, string? Token, string Client);
 
-public enum SubmitResult { Pending, Approved, Dropped, Invalid, TooFast, Expired, RateLimited, NoSuchPage, NameRequired, EmailRequired, EmailInvalid, BodyInvalid }
+public enum SubmitResult { Pending, Approved, Dropped, Invalid, TooFast, Expired, RateLimited, NoSuchPage, NameRequired, EmailRequired, EmailInvalid, BodyInvalid, Reused, Paused, Rejected }
 
 public sealed class CommentSubmission(
     ICommentRepository repository,
@@ -16,9 +17,25 @@ public sealed class CommentSubmission(
     FormToken tokens,
     IContentService content,
     IOptions<CommentsOptions> options,
-    TimeProvider time)
+    TimeProvider time,
+    ICommentSpamCheck spamCheck)
 {
-    public SubmitResult Submit(CommentInput input)
+    public CommentSubmission(
+        ICommentRepository repository,
+        RateLimiter limiter,
+        FormToken tokens,
+        IContentService content,
+        IOptions<CommentsOptions> options,
+        TimeProvider time)
+        : this(repository, limiter, tokens, content, options, time, new AllowAllSpamCheck())
+    {
+    }
+
+    /// <summary>Same as <see cref="SubmitAsync"/> without a request context. Prefer <see cref="SubmitAsync"/>.</summary>
+    public SubmitResult Submit(CommentInput input) =>
+        SubmitAsync(input, null, CancellationToken.None).AsTask().GetAwaiter().GetResult();
+
+    public async ValueTask<SubmitResult> SubmitAsync(CommentInput input, HttpContext? http = null, CancellationToken cancellationToken = default)
     {
         CommentsOptions o = options.Value;
 
@@ -73,17 +90,71 @@ public sealed class CommentSubmission(
             return SubmitResult.NoSuchPage;
         }
 
-        repository.Add(new CommentRow
+        TokenUse use = tokens.Use(input.Token, input.ContentKey, TimeSpan.FromMinutes(o.MaxFormAgeMinutes));
+        if (use != TokenUse.Accepted)
         {
-            Id = Guid.NewGuid(),
-            ContentKey = input.ContentKey,
-            Name = name,
-            Email = email.Length == 0 ? null : email,
-            Body = body,
-            Status = (int)(o.AutoApprove ? CommentStatus.Approved : CommentStatus.Pending),
-            CreatedUtc = time.GetUtcNow().UtcDateTime,
-        });
-        return o.AutoApprove ? SubmitResult.Approved : SubmitResult.Pending;
+            // A full table fails closed with the expired-form notice.
+            return use switch { TokenUse.Reused => SubmitResult.Reused, TokenUse.Full => SubmitResult.Expired, _ => SubmitResult.Invalid };
+        }
+
+        bool saved = false;
+        try
+        {
+            SpamVerdict verdict = await spamCheck.CheckAsync(
+                new CommentSpamContext(input.ContentKey, name, email.Length == 0 ? null : email, body, input.Client, http), cancellationToken);
+            CommentStatus status;
+            switch (verdict)
+            {
+                case SpamVerdict.Allow:
+                    status = o.AutoApprove ? CommentStatus.Approved : CommentStatus.Pending;
+                    break;
+                case SpamVerdict.Spam:
+                    status = CommentStatus.Spam;
+                    break;
+                default:
+                    // Reject, and any value this version does not know, fails closed.
+                    return SubmitResult.Rejected;
+            }
+            if (status == CommentStatus.Pending && PendingCapReached(o, input.ContentKey))
+            {
+                return SubmitResult.Paused;
+            }
+
+            repository.Add(new CommentRow
+            {
+                Id = Guid.NewGuid(),
+                ContentKey = input.ContentKey,
+                Name = name,
+                Email = email.Length == 0 ? null : email,
+                Body = body,
+                Status = (int)status,
+                CreatedUtc = time.GetUtcNow().UtcDateTime,
+            });
+            saved = true;
+            return status switch
+            {
+                CommentStatus.Spam => SubmitResult.Dropped,
+                CommentStatus.Approved => SubmitResult.Approved,
+                _ => SubmitResult.Pending,
+            };
+        }
+        finally
+        {
+            // Nothing was saved, so the visitor can send the same form again.
+            if (!saved)
+            {
+                tokens.Release(input.Token, input.ContentKey);
+            }
+        }
+    }
+
+    private bool PendingCapReached(CommentsOptions o, Guid contentKey)
+    {
+        if (o.MaxPendingTotal is int total && repository.Counts().Pending >= total)
+        {
+            return true;
+        }
+        return o.MaxPendingPerPage is int perPage && repository.Counts([contentKey]).Pending >= perPage;
     }
 
     private static bool IsEmail(string value, int max)
