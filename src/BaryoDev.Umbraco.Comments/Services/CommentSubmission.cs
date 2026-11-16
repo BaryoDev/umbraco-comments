@@ -9,7 +9,7 @@ namespace BaryoDev.Umbraco.Comments.Services;
 
 public sealed record CommentInput(Guid ContentKey, string? Name, string? Email, string? Body, string? Honeypot, string? Token, string Client);
 
-public enum SubmitResult { Pending, Approved, Dropped, Invalid, Reused, Paused, Rejected, TooFast, Expired, RateLimited, NoSuchPage, NameRequired, EmailRequired, EmailInvalid, BodyInvalid }
+public enum SubmitResult { Pending, Approved, Dropped, Invalid, TooFast, Expired, RateLimited, NoSuchPage, NameRequired, EmailRequired, EmailInvalid, BodyInvalid, Reused, Paused, Rejected }
 
 public sealed class CommentSubmission(
     ICommentRepository repository,
@@ -97,37 +97,55 @@ public sealed class CommentSubmission(
             return use switch { TokenUse.Reused => SubmitResult.Reused, TokenUse.Full => SubmitResult.Expired, _ => SubmitResult.Invalid };
         }
 
-        SpamVerdict verdict = await spamCheck.CheckAsync(
-            new CommentSpamContext(input.ContentKey, name, email.Length == 0 ? null : email, body, input.Client, http), cancellationToken);
-        if (verdict == SpamVerdict.Reject)
+        bool saved = false;
+        try
         {
-            return SubmitResult.Rejected;
-        }
+            SpamVerdict verdict = await spamCheck.CheckAsync(
+                new CommentSpamContext(input.ContentKey, name, email.Length == 0 ? null : email, body, input.Client, http), cancellationToken);
+            CommentStatus status;
+            switch (verdict)
+            {
+                case SpamVerdict.Allow:
+                    status = o.AutoApprove ? CommentStatus.Approved : CommentStatus.Pending;
+                    break;
+                case SpamVerdict.Spam:
+                    status = CommentStatus.Spam;
+                    break;
+                default:
+                    // Reject, and any value this version does not know, fails closed.
+                    return SubmitResult.Rejected;
+            }
+            if (status == CommentStatus.Pending && PendingCapReached(o, input.ContentKey))
+            {
+                return SubmitResult.Paused;
+            }
 
-        CommentStatus status = verdict == SpamVerdict.Spam ? CommentStatus.Spam
-            : o.AutoApprove ? CommentStatus.Approved
-            : CommentStatus.Pending;
-        if (status == CommentStatus.Pending && PendingCapReached(o, input.ContentKey))
-        {
-            return SubmitResult.Paused;
+            repository.Add(new CommentRow
+            {
+                Id = Guid.NewGuid(),
+                ContentKey = input.ContentKey,
+                Name = name,
+                Email = email.Length == 0 ? null : email,
+                Body = body,
+                Status = (int)status,
+                CreatedUtc = time.GetUtcNow().UtcDateTime,
+            });
+            saved = true;
+            return status switch
+            {
+                CommentStatus.Spam => SubmitResult.Dropped,
+                CommentStatus.Approved => SubmitResult.Approved,
+                _ => SubmitResult.Pending,
+            };
         }
-
-        repository.Add(new CommentRow
+        finally
         {
-            Id = Guid.NewGuid(),
-            ContentKey = input.ContentKey,
-            Name = name,
-            Email = email.Length == 0 ? null : email,
-            Body = body,
-            Status = (int)status,
-            CreatedUtc = time.GetUtcNow().UtcDateTime,
-        });
-        return status switch
-        {
-            CommentStatus.Spam => SubmitResult.Dropped,
-            CommentStatus.Approved => SubmitResult.Approved,
-            _ => SubmitResult.Pending,
-        };
+            // Nothing was saved, so the visitor can send the same form again.
+            if (!saved)
+            {
+                tokens.Release(input.Token, input.ContentKey);
+            }
+        }
     }
 
     private bool PendingCapReached(CommentsOptions o, Guid contentKey)

@@ -13,15 +13,38 @@ public sealed class CommentsRetention(ICommentRetentionStore store, IOptions<Com
         CommentsOptions o = options.Value;
         DateTime now = time.GetUtcNow().UtcDateTime;
         int deleted = 0;
+        var errors = new List<Exception>();
         if (o.SpamRetentionDays is int spamDays)
         {
-            deleted += store.DeleteOlderThan(CommentStatus.Spam, now.AddDays(-spamDays));
+            deleted += Try(CommentStatus.Spam, now.AddDays(-spamDays), errors);
         }
         if (o.PendingRetentionDays is int pendingDays)
         {
-            deleted += store.DeleteOlderThan(CommentStatus.Pending, now.AddDays(-pendingDays));
+            deleted += Try(CommentStatus.Pending, now.AddDays(-pendingDays), errors);
+        }
+        if (errors.Count == 1)
+        {
+            throw errors[0];
+        }
+        if (errors.Count > 1)
+        {
+            throw new AggregateException(errors);
         }
         return deleted;
+    }
+
+    // One failed delete must not skip the other.
+    private int Try(CommentStatus status, DateTime cutoff, List<Exception> errors)
+    {
+        try
+        {
+            return store.DeleteOlderThan(status, cutoff);
+        }
+        catch (Exception e)
+        {
+            errors.Add(e);
+            return 0;
+        }
     }
 }
 
@@ -30,6 +53,8 @@ public sealed class CommentsRetentionService(CommentsRetention retention, IOptio
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Let host start-up carry on before the first run.
+        await Task.Yield();
         CommentsOptions o = options.Value;
         if (o.SpamRetentionDays is null && o.PendingRetentionDays is null)
         {

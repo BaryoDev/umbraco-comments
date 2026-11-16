@@ -13,17 +13,22 @@ public sealed class CommentsComposer : IComposer
 {
     public void Compose(IUmbracoBuilder builder)
     {
-        builder.Services.AddOptions<CommentsOptions>().BindConfiguration(CommentsOptions.Section).ValidateOnStart();
-        builder.Services.AddSingleton<IValidateOptions<CommentsOptions>, CommentsOptionsValidator>();
-        builder.Services.TryAddSingleton<ICommentSpamCheck, AllowAllSpamCheck>();
-        builder.Services.AddSingleton<ICommentRetentionStore, CommentRetentionStore>();
-        builder.Services.AddSingleton<CommentsRetention>();
-        builder.Services.AddHostedService<CommentsRetentionService>();
-        builder.Services.TryAddSingleton(TimeProvider.System);
-        builder.Services.AddSingleton<ICommentRepository, CommentRepository>();
-        builder.Services.AddSingleton<RateLimiter>();
-        builder.Services.AddSingleton<FormToken>();
-        builder.Services.AddTransient<CommentSubmission>();
+        AddServices(builder.Services);
         builder.AddNotificationHandler<ContentDeletedNotification, CommentsContentDeletedHandler>();
+    }
+
+    internal static void AddServices(IServiceCollection services)
+    {
+        services.AddOptions<CommentsOptions>().BindConfiguration(CommentsOptions.Section).ValidateOnStart();
+        services.AddSingleton<IValidateOptions<CommentsOptions>, CommentsOptionsValidator>();
+        services.TryAddSingleton<ICommentSpamCheck, AllowAllSpamCheck>();
+        services.AddSingleton<ICommentRetentionStore, CommentRetentionStore>();
+        services.AddSingleton<CommentsRetention>();
+        services.AddHostedService<CommentsRetentionService>();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddSingleton<ICommentRepository, CommentRepository>();
+        services.AddSingleton<RateLimiter>();
+        services.AddSingleton<FormToken>();
+        services.AddTransient<CommentSubmission>();
     }
 }

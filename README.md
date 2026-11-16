@@ -34,7 +34,7 @@ Content section, Comments dashboard. Tabs for pending, approved and spam. Approv
 
 Antiforgery token, a honeypot field, a minimum time on the form, a per-IP sliding window in memory (the address is hashed and not stored), length limits, single-use form tokens, a cap on pending comments and an optional spam check hook.
 
-Each form token works once. A second post with the same token is refused with "That comment was already sent". Used tokens are kept in memory on one server until they would have expired (`MaxFormAgeMinutes`), at most 50,000. If that table is full of live tokens, new posts get the "form was open too long" notice until some expire. On a load-balanced site without sticky sessions, single use holds per server, not across servers. Tokens now carry a random id, so a form that was open in a visitor's browser during the upgrade is rejected once. They reload and send again.
+Each form token works once. A second post with the same token is refused with "That comment was already sent". A token is released again when nothing was saved (a cap pause, a spam hook reject or error, a failed save), so the visitor can send the same form again. Used tokens are kept in memory on one server until they would have expired (`MaxFormAgeMinutes`), at most 50,000. If that table is full of live tokens, new posts get the "form was open too long" notice until some expire. On a load-balanced site without sticky sessions, single use holds per server, not across servers. Tokens now carry a random id, so a form that was open in a visitor's browser during the upgrade is rejected once. They reload and send again.
 
 ### Pending cap
 
@@ -87,7 +87,7 @@ Section `BaryoDev:Comments` in appsettings:
 
 ## Retention and email
 
-Off by default. Set `SpamRetentionDays` or `PendingRetentionDays` (1 or more) and an hourly background job deletes spam or pending comments older than that. Approved comments are never deleted by age. On a site with several servers each one runs the job, which is harmless.
+Off by default. Set `SpamRetentionDays` or `PendingRetentionDays` (1 to 36500) and an hourly background job deletes spam or pending comments older than that. Approved comments are never deleted by age. On a site with several servers each one runs the job, which is harmless.
 
 An email address is kept until its comment is deleted. To erase it, delete the comment in the dashboard or call `DELETE /umbraco/management/api/v1/comments/{id}`. Deleting a page deletes its comments.
 

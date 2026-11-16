@@ -3,6 +3,7 @@ using System.Reflection;
 using BaryoDev.Umbraco.Comments.Data;
 using BaryoDev.Umbraco.Comments.Services;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 using Umbraco.Cms.Core.Models;
@@ -318,8 +319,179 @@ public class SubmissionTests
     [Fact]
     public void Every_token_carries_its_own_nonce()
     {
-        var rig = new Rig(new CommentsOptions());
-        Assert.NotEqual(rig.Tokens.Issue(rig.PageKey), rig.Tokens.Issue(rig.PageKey));
+        var provider = new EphemeralDataProtectionProvider();
+        var time = new FakeTimeProvider();
+        var tokens = new FormToken(provider, time);
+        var key = Guid.NewGuid();
+        var protector = provider.CreateProtector("BaryoDev.Umbraco.Comments.FormToken");
+
+        string[] a = protector.Unprotect(tokens.Issue(key)).Split('|');
+        string[] b = protector.Unprotect(tokens.Issue(key)).Split('|');
+
+        Assert.Equal(a[0], b[0]);
+        Assert.Equal(a[1], b[1]);
+        Assert.NotEmpty(a[2]);
+        Assert.NotEqual(a[2], b[2]);
+    }
+
+    [Fact]
+    public void Two_tokens_issued_in_the_same_second_are_both_accepted_once()
+    {
+        var time = new FakeTimeProvider();
+        var tokens = new FormToken(new EphemeralDataProtectionProvider(), time);
+        var key = Guid.NewGuid();
+        string first = tokens.Issue(key);
+        string second = tokens.Issue(key);
+        var maxAge = TimeSpan.FromMinutes(10);
+
+        Assert.Equal(TokenUse.Accepted, tokens.Use(first, key, maxAge));
+        Assert.Equal(TokenUse.Accepted, tokens.Use(second, key, maxAge));
+        Assert.Equal(TokenUse.Reused, tokens.Use(first, key, maxAge));
+    }
+
+    [Fact]
+    public void Concurrent_use_of_one_token_is_accepted_once()
+    {
+        var tokens = new FormToken(new EphemeralDataProtectionProvider(), new FakeTimeProvider());
+        var key = Guid.NewGuid();
+        string token = tokens.Issue(key);
+        var results = new TokenUse[64];
+
+        Parallel.For(0, results.Length, new ParallelOptions { MaxDegreeOfParallelism = 16 },
+            i => results[i] = tokens.Use(token, key, TimeSpan.FromMinutes(10)));
+
+        Assert.Equal(1, results.Count(r => r == TokenUse.Accepted));
+        Assert.Equal(results.Length - 1, results.Count(r => r == TokenUse.Reused));
+    }
+
+    [Fact]
+    public void Submit_result_keeps_the_numbers_it_had_in_0_1_0()
+    {
+        var v010 = new (string Name, int Value)[]
+        {
+            ("Pending", 0), ("Approved", 1), ("Dropped", 2), ("Invalid", 3), ("TooFast", 4), ("Expired", 5),
+            ("RateLimited", 6), ("NoSuchPage", 7), ("NameRequired", 8), ("EmailRequired", 9), ("EmailInvalid", 10), ("BodyInvalid", 11),
+        };
+        foreach (var (name, value) in v010)
+        {
+            Assert.Equal(value, (int)Enum.Parse<SubmitResult>(name));
+        }
+        Assert.Equal(12, (int)SubmitResult.Reused);
+        Assert.Equal(13, (int)SubmitResult.Paused);
+        Assert.Equal(14, (int)SubmitResult.Rejected);
+    }
+
+    private sealed class ThrowingSpamCheck : ICommentSpamCheck
+    {
+        public ValueTask<SpamVerdict> CheckAsync(CommentSpamContext context, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("hook failed");
+    }
+
+    private sealed class RejectOnceSpamCheck : ICommentSpamCheck
+    {
+        private int _calls;
+
+        public ValueTask<SpamVerdict> CheckAsync(CommentSpamContext context, CancellationToken cancellationToken) =>
+            ValueTask.FromResult(_calls++ == 0 ? SpamVerdict.Reject : SpamVerdict.Allow);
+    }
+
+    private sealed class ThrowingRepository : ICommentRepository
+    {
+        private readonly RecordingRepository _inner = new();
+        public bool Throw { get; set; } = true;
+        public List<CommentRow> Added => _inner.Added;
+
+        public void Add(CommentRow row)
+        {
+            if (Throw)
+            {
+                throw new InvalidOperationException("db down");
+            }
+            _inner.Add(row);
+        }
+
+        public IReadOnlyList<CommentRow> ListApproved(Guid contentKey, int skip, int take) => [];
+        public int CountApproved(Guid contentKey) => 0;
+        public int DeleteForContent(Guid contentKey) => 0;
+        public IReadOnlyList<CommentRow> List(CommentStatus status, int skip, int take, IReadOnlyCollection<Guid>? contentKeys = null) => [];
+        public CommentCounts Counts(IReadOnlyCollection<Guid>? contentKeys = null) => new(0, 0, 0);
+        public IReadOnlyList<Guid> ContentKeys() => [];
+        public CommentRow? Get(Guid id) => null;
+        public bool SetStatus(Guid id, CommentStatus status) => false;
+        public bool Delete(Guid id) => false;
+    }
+
+    [Fact]
+    public void A_throwing_hook_saves_nothing_and_releases_the_token()
+    {
+        var rig = new Rig(new CommentsOptions(), pagePublished: true, spam: new ThrowingSpamCheck());
+        string token = rig.Tokens.Issue(rig.PageKey);
+
+        Assert.Throws<InvalidOperationException>(() => rig.SendToken(token));
+        Assert.Empty(rig.Repository.Added);
+        Assert.Equal(0, rig.Tokens.UsedCount);
+    }
+
+    [Fact]
+    public void A_rejected_comment_releases_the_token_so_a_resend_works()
+    {
+        var rig = new Rig(new CommentsOptions(), pagePublished: true, spam: new RejectOnceSpamCheck());
+        string token = rig.Tokens.Issue(rig.PageKey);
+
+        Assert.Equal(SubmitResult.Rejected, rig.SendToken(token));
+        Assert.Equal(SubmitResult.Pending, rig.SendToken(token));
+        Assert.Single(rig.Repository.Added);
+    }
+
+    [Fact]
+    public void A_paused_comment_releases_the_token_so_a_resend_works_after_the_cap_clears()
+    {
+        var rig = new Rig(new CommentsOptions { MaxPendingPerPage = 100 }, pagePublished: true);
+        string token = rig.Tokens.Issue(rig.PageKey);
+        rig.Repository.PendingForPage = 100;
+
+        Assert.Equal(SubmitResult.Paused, rig.SendToken(token));
+        rig.Repository.PendingForPage = 0;
+        Assert.Equal(SubmitResult.Pending, rig.SendToken(token));
+        Assert.Single(rig.Repository.Added);
+    }
+
+    [Fact]
+    public void A_failed_save_releases_the_token()
+    {
+        var time = new FakeTimeProvider();
+        var repository = new ThrowingRepository();
+        var tokens = new FormToken(new EphemeralDataProtectionProvider(), time);
+        var key = Guid.NewGuid();
+        var submission = new CommentSubmission(repository, new RateLimiter(time), tokens,
+            DispatchProxy.Create<IContentService, PublishedContentProxy>(), Options.Create(new CommentsOptions()), time);
+        string token = tokens.Issue(key);
+        time.Advance(TimeSpan.FromSeconds(10));
+        var input = new CommentInput(key, "Ana", null, "Hello there", null, token, "1.1.1.1");
+
+        Assert.Throws<InvalidOperationException>(() => submission.Submit(input));
+        repository.Throw = false;
+        Assert.Equal(SubmitResult.Pending, submission.Submit(input));
+        Assert.Single(repository.Added);
+    }
+
+    [Fact]
+    public void An_unknown_verdict_value_fails_closed()
+    {
+        var rig = new Rig(new CommentsOptions(), pagePublished: true, spam: new FixedSpamCheck((SpamVerdict)99));
+
+        Assert.Equal(SubmitResult.Rejected, rig.Send());
+        Assert.Empty(rig.Repository.Added);
+    }
+
+    [Fact]
+    public void A_registered_spam_check_replaces_the_default()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton<ICommentSpamCheck, ThrowingSpamCheck>();
+        CommentsComposer.AddServices(services);
+
+        Assert.IsType<ThrowingSpamCheck>(services.BuildServiceProvider().GetRequiredService<ICommentSpamCheck>());
     }
 
     [Fact]

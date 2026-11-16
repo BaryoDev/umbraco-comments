@@ -73,6 +73,19 @@ public sealed class FormToken
         }
     }
 
+    /// <summary>Forgets a used token so it can be sent again. Call it when nothing was saved.</summary>
+    public void Release(string? token, Guid contentKey)
+    {
+        if (Read(token, contentKey) is not var (_, nonce))
+        {
+            return;
+        }
+        lock (_gate)
+        {
+            _used.Remove(nonce);
+        }
+    }
+
     internal int UsedCount
     {
         get { lock (_gate) { return _used.Count; } }

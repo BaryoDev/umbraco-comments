@@ -38,6 +38,51 @@ public class RetentionTests
     private static int Run(FakeStore store, CommentsOptions options) =>
         new CommentsRetention(store, Options.Create(options), new FakeTimeProvider(Now)).RunOnce();
 
+    private sealed class FailingSpamStore(FakeStore inner) : ICommentRetentionStore
+    {
+        public int DeleteOlderThan(CommentStatus status, DateTime cutoffUtc) =>
+            status == CommentStatus.Spam ? throw new InvalidOperationException("db") : inner.DeleteOlderThan(status, cutoffUtc);
+    }
+
+    [Fact]
+    public void A_failed_spam_delete_does_not_skip_the_pending_delete()
+    {
+        var store = Seed();
+        var run = new CommentsRetention(new FailingSpamStore(store),
+            Options.Create(new CommentsOptions { SpamRetentionDays = 5, PendingRetentionDays = 30 }), new FakeTimeProvider(Now));
+
+        Assert.Throws<InvalidOperationException>(() => run.RunOnce());
+        Assert.Equal(2, store.Rows.Count(r => r.Status == CommentStatus.Pending));
+        Assert.Equal(3, store.Rows.Count(r => r.Status == CommentStatus.Spam));
+    }
+
+    [Fact]
+    public async Task The_background_service_returns_from_start_before_the_first_run()
+    {
+        var store = new BlockingStore();
+        var service = new CommentsRetentionService(
+            new CommentsRetention(store, Options.Create(new CommentsOptions { SpamRetentionDays = 5 }), new FakeTimeProvider(Now)),
+            Options.Create(new CommentsOptions { SpamRetentionDays = 5 }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<CommentsRetentionService>.Instance);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        await service.StartAsync(CancellationToken.None);
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(2), "start waited for the first run");
+        store.Release.Set();
+        await service.StopAsync(CancellationToken.None);
+    }
+
+    private sealed class BlockingStore : ICommentRetentionStore
+    {
+        public ManualResetEventSlim Release { get; } = new();
+
+        public int DeleteOlderThan(CommentStatus status, DateTime cutoffUtc)
+        {
+            Release.Wait(TimeSpan.FromSeconds(5));
+            return 0;
+        }
+    }
+
     [Fact]
     public void Nothing_is_deleted_when_both_settings_are_null()
     {
@@ -95,6 +140,10 @@ public class RetentionTests
     [InlineData(null, -1, null, null, false)]
     [InlineData(null, null, 0, null, false)]
     [InlineData(null, null, null, -5, false)]
+    [InlineData(null, null, 36501, null, false)]
+    [InlineData(null, null, null, 36501, false)]
+    [InlineData(null, null, int.MaxValue, int.MaxValue, false)]
+    [InlineData(null, null, 36500, 36500, true)]
     [InlineData(0, 0, 1, 1, true)]
     [InlineData(null, null, null, null, true)]
     public void Options_are_validated(int? perPage, int? total, int? spamDays, int? pendingDays, bool valid)
