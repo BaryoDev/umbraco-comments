@@ -5,7 +5,7 @@
 ### Breaking
 
 - Forms open during the upgrade are rejected once, because form tokens now carry a page key and a random id.
-- For a custom `ICommentRepository`, the dashboard counts show zero for editors who are not administrators (0.1.0 showed sitewide counts, which leaked). Rows still show, filtered per page as in 0.1.0. Implement `ICommentRepositoryScoped` for page-scoped lists and counts. If you set `MaxPendingPerPage`, a custom repository uses the total pending count for it.
+- For a custom `ICommentRepository`, the dashboard counts show zero for non-administrators and when no user is signed in (0.1.0 showed sitewide counts, which leaked). Rows still show, filtered per page as in 0.1.0, and paging keeps working through a new `HasMore` flag on the list response. Implement `ICommentRepositoryScoped` for page-scoped lists and counts. If you set `MaxPendingPerPage`, a custom repository uses the total pending count for it.
 - The restored 0.1.0 members are `[Obsolete]`, so builds with warnings as errors need `NoWarn` CS0618 until they move to the new members.
 - `SubmitResult` has new members (`Reused`, `Paused`, `Rejected`). If you switch over it exhaustively, add a default arm.
 

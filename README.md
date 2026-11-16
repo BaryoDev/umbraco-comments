@@ -30,6 +30,8 @@ Comments are removed when their page is deleted.
 
 Content section, Comments dashboard. Tabs for pending, approved and spam. Approve, mark spam or delete. The API is at `/umbraco/management/api/v1/comments` and needs Content section access.
 
+`ICommentRepositoryScoped` is implemented by the built-in repository. A custom `ICommentRepository` is used everywhere else, and the dashboard filters its rows per page (counts show zero for non-administrators).
+
 ## Abuse controls
 
 Antiforgery token, a honeypot field, a minimum time on the form, a per-IP sliding window in memory (the address is hashed and not stored), length limits, single-use form tokens, a cap on pending comments and an optional spam check hook.
@@ -37,8 +39,6 @@ Antiforgery token, a honeypot field, a minimum time on the form, a per-IP slidin
 Each form token works once. A second post with the same token is refused with "That comment was already sent". A token is released again when nothing was saved (a cap pause, a spam hook reject or error, a failed save), so the visitor can send the same form again. Used tokens are kept in memory on one server until they would have expired (`MaxFormAgeMinutes`), at most 50,000. If that table is full of live tokens, new posts get the "form was open too long" notice until some expire. On a load-balanced site without sticky sessions, single use holds per server, not across servers. Tokens now carry a random id, so a form that was open in a visitor's browser during the upgrade is rejected once. They reload and send again.
 
 ### Pending cap
-
-`ICommentRepositoryScoped` is implemented by the built-in repository. A custom `ICommentRepository` is used everywhere else, and the dashboard filters its rows per page (counts show zero for non-administrators).
 
 `MaxPendingPerPage` and `MaxPendingTotal` limit pending comments. Default: none (off). Set them if spam could fill your database. The trade-off: at either cap, new comments are refused with "Comments are paused for review" and nothing is saved until a moderator clears the queue (approve, mark spam or delete rows). `null` means no cap, `0` pauses new comments, negative values fail at startup. Auto-approved comments are not counted.
 

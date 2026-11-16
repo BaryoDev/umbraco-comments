@@ -17,7 +17,11 @@ namespace BaryoDev.Umbraco.Comments.Api;
 
 public sealed record CommentItem(Guid Id, Guid ContentKey, string? PageName, string Name, string? Email, string Body, string Status, DateTime CreatedUtc);
 
-public sealed record CommentList(IReadOnlyList<CommentItem> Items, CommentCounts Counts, int Total);
+public sealed record CommentList(IReadOnlyList<CommentItem> Items, CommentCounts Counts, int Total)
+{
+    /// <summary>True when a next page may exist. Needed because counts are zero for editors on a custom repository.</summary>
+    public bool HasMore { get; init; }
+}
 
 /// <summary>Moderation queue. Content section access plus Browse on each comment's page, checked on the server.</summary>
 [ApiVersion("1.0")]
@@ -46,7 +50,7 @@ public sealed class CommentsApiController(
         // Rows, counts and total cover only the pages the user can browse. Administrators also see rows whose page is gone.
         var names = new Dictionary<Guid, string?>();
         var items = new List<CommentItem>();
-        var (rows, counts) = await ModerationQuery.RunAsync(repository, parsed, skip, take, AudienceOfUser(), CanSeeAsync);
+        var (rows, counts, hasMore) = await ModerationQuery.RunAsync(repository, parsed, skip, take, AudienceOfUser(), CanSeeAsync);
         foreach (CommentRow r in rows)
         {
             if (!names.TryGetValue(r.ContentKey, out var pageName))
@@ -58,7 +62,7 @@ public sealed class CommentsApiController(
                 ((CommentStatus)r.Status).ToString().ToLowerInvariant(), DateTime.SpecifyKind(r.CreatedUtc, DateTimeKind.Utc)));
         }
         int total = parsed switch { CommentStatus.Pending => counts.Pending, CommentStatus.Approved => counts.Approved, _ => counts.Spam };
-        return Ok(new CommentList(items, counts, total));
+        return Ok(new CommentList(items, counts, total) { HasMore = hasMore });
     }
 
     [HttpPost("{id:guid}/approve")]
@@ -103,17 +107,8 @@ public sealed class CommentsApiController(
     }
 
     // Null means every page (administrators). Anyone else gets the pages they can browse, or none without a user.
-    private ModerationQuery.Audience AudienceOfUser()
-    {
-        IUser? user = security.BackOfficeSecurity?.CurrentUser;
-        if (user is null)
-        {
-            return ModerationQuery.Audience.None;
-        }
-        return user.Groups.Any(g => g.Alias == Constants.Security.AdminGroupAlias)
-            ? ModerationQuery.Audience.Administrator
-            : ModerationQuery.Audience.Editor;
-    }
+    private ModerationQuery.Audience AudienceOfUser() =>
+        ModerationQuery.AudienceOf(security.BackOfficeSecurity?.CurrentUser?.Groups.Select(g => g.Alias));
 
     // Fails closed: no user, no access. Rows of deleted pages have no node to check, so only administrators see them.
     private readonly Dictionary<Guid, bool> _seen = [];

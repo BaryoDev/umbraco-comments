@@ -150,10 +150,75 @@ public class ApiCompatTests
     {
         var repository = WithRows();
 
-        var (rows, counts) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Editor, OnlyPage);
+        var (rows, counts, _) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Editor, OnlyPage);
 
         Assert.Equal(["visible"], rows.Select(r => r.Body));
         Assert.Equal(new CommentCounts(0, 0, 0), counts);
+    }
+
+    // Pins the HasMore line in the unscoped Editor arm: the page size is taken before the visibility filter.
+    [Fact]
+    public async Task A_full_page_that_is_entirely_hidden_still_reports_more()
+    {
+        var repository = new PlainFake { Rows = [new CommentRow { ContentKey = Hidden }, new CommentRow { ContentKey = Hidden }] };
+
+        var (rows, counts, hasMore) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 2, ModerationQuery.Audience.Editor, OnlyPage);
+
+        Assert.Empty(rows);
+        Assert.Equal(new CommentCounts(0, 0, 0), counts);
+        Assert.True(hasMore);
+    }
+
+    // Same line: a short unfiltered page is the last one.
+    [Fact]
+    public async Task A_short_unfiltered_page_reports_no_more()
+    {
+        var repository = new PlainFake { Rows = [new CommentRow { ContentKey = Page }] };
+
+        var (_, _, hasMore) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 2, ModerationQuery.Audience.Editor, OnlyPage);
+
+        Assert.False(hasMore);
+    }
+
+    // Pins the skip + take < total lines in the Administrator arm.
+    [Fact]
+    public async Task An_administrator_gets_HasMore_from_the_total()
+    {
+        var more = await ModerationQuery.RunAsync(new PlainFake { Pending = 3 }, CommentStatus.Pending, 0, 2, ModerationQuery.Audience.Administrator, OnlyPage);
+        var last = await ModerationQuery.RunAsync(new PlainFake { Pending = 3 }, CommentStatus.Pending, 2, 2, ModerationQuery.Audience.Administrator, OnlyPage);
+
+        Assert.True(more.HasMore);
+        Assert.False(last.HasMore);
+    }
+
+    // Pins ModerationQuery.AudienceOf.
+    [Fact]
+    public void AudienceOf_maps_no_user_to_None()
+    {
+        Assert.Equal(ModerationQuery.Audience.None, ModerationQuery.AudienceOf(null));
+    }
+
+    [Fact]
+    public void AudienceOf_maps_only_the_admin_group_to_Administrator()
+    {
+        Assert.Equal(ModerationQuery.Audience.Administrator, ModerationQuery.AudienceOf(["editor", global::Umbraco.Cms.Core.Constants.Security.AdminGroupAlias]));
+        Assert.Equal(ModerationQuery.Audience.Editor, ModerationQuery.AudienceOf(["editor"]));
+    }
+
+    [Fact]
+    public void AudienceOf_maps_a_user_with_no_groups_to_Editor_as_0_1_0_did()
+    {
+        Assert.Equal(ModerationQuery.Audience.Editor, ModerationQuery.AudienceOf([]));
+    }
+
+    // Pins the OperationCanceledException filter in ModerationQuery.Safe.
+    [Fact]
+    public async Task A_cancelled_check_is_not_swallowed()
+    {
+        var repository = WithRows();
+
+        await Assert.ThrowsAsync<OperationCanceledException>(() => ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50,
+            ModerationQuery.Audience.Editor, _ => throw new OperationCanceledException()));
     }
 
     // Pins the try/catch in ModerationQuery.Safe: a failed check drops the row.
@@ -162,7 +227,7 @@ public class ApiCompatTests
     {
         var repository = WithRows();
 
-        var (rows, _) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Editor,
+        var (rows, _, _) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Editor,
             key => key == Page ? throw new InvalidOperationException("permission service down") : Task.FromResult(true));
 
         Assert.Equal(["hidden"], rows.Select(r => r.Body));
@@ -174,7 +239,7 @@ public class ApiCompatTests
     {
         var repository = WithRows();
 
-        var (rows, counts) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Administrator,
+        var (rows, counts, _) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.Administrator,
             _ => throw new InvalidOperationException("must not be called"));
 
         Assert.Equal(2, rows.Count);
@@ -187,7 +252,7 @@ public class ApiCompatTests
     {
         var repository = WithRows();
 
-        var (rows, counts) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.None, _ => Task.FromResult(true));
+        var (rows, counts, _) = await ModerationQuery.RunAsync(repository, CommentStatus.Pending, 0, 50, ModerationQuery.Audience.None, _ => Task.FromResult(true));
 
         Assert.Empty(rows);
         Assert.Equal(new CommentCounts(0, 0, 0), counts);
