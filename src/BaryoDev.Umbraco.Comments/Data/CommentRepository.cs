@@ -2,7 +2,7 @@ using Umbraco.Cms.Infrastructure.Scoping;
 
 namespace BaryoDev.Umbraco.Comments.Data;
 
-public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRepositoryScoped
+public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRepositoryScoped, ICommentRepositoryThreaded
 {
     public void Add(CommentRow row)
     {
@@ -99,8 +99,57 @@ public sealed class CommentRepository(IScopeProvider scopeProvider) : ICommentRe
     public bool Delete(Guid id)
     {
         using var scope = scopeProvider.CreateScope();
+        scope.Database.Execute("DELETE FROM baryoComment WHERE ParentId = @0", id);
         int n = scope.Database.Execute("DELETE FROM baryoComment WHERE Id = @0", id);
         scope.Complete();
         return n > 0;
+    }
+
+    public IReadOnlyList<CommentRow> ListApprovedTopLevel(Guid contentKey, int skip, int take)
+    {
+        using var scope = scopeProvider.CreateScope(autoComplete: true);
+        return scope.Database.SkipTake<CommentRow>(skip, take,
+            "SELECT * FROM baryoComment WHERE ContentKey = @0 AND Status = @1 AND ParentId IS NULL ORDER BY CreatedUtc ASC, Id ASC",
+            contentKey, (int)CommentStatus.Approved);
+    }
+
+    public int CountApprovedTopLevel(Guid contentKey)
+    {
+        using var scope = scopeProvider.CreateScope(autoComplete: true);
+        return scope.Database.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM baryoComment WHERE ContentKey = @0 AND Status = @1 AND ParentId IS NULL",
+            contentKey, (int)CommentStatus.Approved);
+    }
+
+    public IReadOnlyList<CommentRow> ListReplies(IReadOnlyCollection<Guid> parentIds)
+    {
+        if (parentIds.Count == 0)
+        {
+            return [];
+        }
+        using var scope = scopeProvider.CreateScope(autoComplete: true);
+        var merged = new List<CommentRow>();
+        foreach (Guid[] batch in parentIds.Distinct().Chunk(KeyBatch))
+        {
+            merged.AddRange(scope.Database.Fetch<CommentRow>(
+                "SELECT * FROM baryoComment WHERE Status = @0 AND ParentId IN (@1)", (int)CommentStatus.Approved, batch));
+        }
+        return merged.OrderBy(r => r.CreatedUtc).ThenBy(r => r.Id).ToList();
+    }
+
+    public bool TryClaimNotify(Guid replyId, DateTime utc)
+    {
+        using var scope = scopeProvider.CreateScope();
+        int n = scope.Database.Execute(
+            "UPDATE baryoComment SET NotifiedUtc = @0 WHERE Id = @1 AND ParentId IS NOT NULL AND NotifiedUtc IS NULL", utc, replyId);
+        scope.Complete();
+        return n == 1;
+    }
+
+    public void ReleaseNotify(Guid replyId)
+    {
+        using var scope = scopeProvider.CreateScope();
+        scope.Database.Execute("UPDATE baryoComment SET NotifiedUtc = NULL WHERE Id = @0", replyId);
+        scope.Complete();
     }
 }

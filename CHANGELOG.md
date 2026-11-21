@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changes
+
+- Reply to approved comments from the dashboard. A reply is saved as approved and shows under the comment on the page with a "Reply" badge. Replies go one level deep. Each comment's `<li>` now has an `id="comment-{id}"` anchor.
+- If the commenter left an email address, the reply emails them once through Umbraco's `IEmailSender` (SMTP or a `SendEmailNotification` handler). Without mail set up the reply still posts, the dashboard shows "Not emailed", and Send email sends it later. Replace `ICommentReplyEmail` to change the email.
+- New routes `POST {id}/reply` and `POST {id}/notify` under `/umbraco/management/api/v1/comments`, with the same Browse check as approve. List items gain `ParentId`, `ParentName`, `IsSiteReply`, `NotifiedUtc`, `CanReply` and `CanNotify`.
+- A migration adds three nullable columns to `baryoComment`: `ParentId` (indexed), `AuthorUserKey` and `NotifiedUtc`. Existing rows are untouched.
+- Deleting a comment deletes its replies. Marking it spam hides them. Retention removes replies whose comment is gone.
+- New options `ReplyTo` (reply-to address on the email) and `PublicBaseUrl` (host for the link in the email, for a backoffice on another host). Both are validated at startup.
+- The form's email hint now reads "Never shown on the page. Used only to email you if someone replies."
+- Replies need a repository that implements the new `ICommentRepositoryThreaded`. The built-in one does. `ICommentRepository` and `ICommentRepositoryScoped` are unchanged.
+- `CommentsApiController` takes two more constructor parameters (`CommentReplies`, `IOptions<CommentsOptions>`). MVC creates it, so only code that constructs it by hand needs to change.
+
 ## 0.2.0
 
 ### Breaking

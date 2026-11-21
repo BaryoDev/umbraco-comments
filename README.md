@@ -32,6 +32,16 @@ Content section, Comments dashboard. Tabs for pending, approved and spam. Approv
 
 `ICommentRepositoryScoped` is implemented by the built-in repository. A custom `ICommentRepository` is used everywhere else, and the dashboard filters its rows per page (counts show zero for non-administrators).
 
+## Replies
+
+In the Approved tab, press Reply on a comment, write the reply and press Send reply. The reply is saved as approved and shows under the comment on the page, with your backoffice name and a "Reply" badge. Replies go one level deep, so a reply can not be replied to. You need Browse on the comment's page. Deleting a comment deletes its replies, and marking it spam hides them.
+
+If the commenter left an email address, "Email {name}" is ticked and they get one email with the reply and a link to it on the page. The email goes through Umbraco's own sender, so it needs `Umbraco:CMS:Global:Smtp` or a handler for Umbraco's `SendEmailNotification`. Without either, the reply still posts and the dashboard shows "Not emailed". Once mail works, press Send email on the reply. Each reply is emailed at most once, even if two people press Send email at the same time. A failed send can be tried again. Send email is refused once the comment or the reply is no longer approved.
+
+`ReplyTo` is the address the commenter's mail app answers to. `PublicBaseUrl` (for example `https://baryo.dev`) is the host used for the link in the email. Set it when the backoffice runs on a different host from the public site, or the link points at the backoffice host. To change the wording or send mail another way, register your own `ICommentReplyEmail`.
+
+Replies need the built-in repository. A custom `ICommentRepository` that does not implement `ICommentRepositoryThreaded` shows no Reply button, and the reply endpoints answer 400.
+
 ## Abuse controls
 
 Antiforgery token, a honeypot field, a minimum time on the form, a per-IP sliding window in memory (the address is hashed and not stored), length limits, single-use form tokens, a cap on pending comments and an optional spam check hook.
@@ -79,7 +89,9 @@ Section `BaryoDev:Comments` in appsettings:
       "MaxPendingPerPage": null,
       "MaxPendingTotal": null,
       "SpamRetentionDays": null,
-      "PendingRetentionDays": null
+      "PendingRetentionDays": null,
+      "ReplyTo": null,
+      "PublicBaseUrl": null
     }
   }
 }
@@ -95,7 +107,7 @@ An email address is kept until its comment is deleted. To erase it, delete the c
 
 ## Not in this version
 
-Visitor sign-in, replies, reactions and notification emails. See `docs/design.md`.
+Visitor sign-in, replies from visitors, reactions and new-comment emails to editors. See `docs/design.md`.
 
 ## License
 

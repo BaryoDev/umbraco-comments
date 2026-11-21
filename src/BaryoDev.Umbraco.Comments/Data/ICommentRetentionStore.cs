@@ -19,6 +19,8 @@ public sealed class CommentRetentionStore(IScopeProvider scopeProvider) : IComme
         }
         using var scope = scopeProvider.CreateScope();
         int n = scope.Database.Execute("DELETE FROM baryoComment WHERE Status = @0 AND CreatedUtc < @1", (int)status, cutoffUtc);
+        // Replies go with their parent, so none are left pointing at a row that is gone.
+        scope.Database.Execute("DELETE FROM baryoComment WHERE ParentId IS NOT NULL AND ParentId NOT IN (SELECT Id FROM baryoComment)");
         scope.Complete();
         return n;
     }

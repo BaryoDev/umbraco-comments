@@ -17,9 +17,25 @@
         <ol class="bdc__list">
             @foreach (var c in Model.Comments)
             {
-                <li class="bdc__item">
+                <li class="bdc__item" id="comment-@c.Id">
                     <p class="bdc__meta"><strong class="bdc__name">@c.Name</strong> <time datetime="@c.CreatedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")">@c.CreatedUtc.ToString("d MMM yyyy")</time></p>
                     <p class="bdc__body">@c.Body</p>
+                    @if (c.Replies.Count > 0)
+                    {
+                        <ol class="bdc__replies">
+                            @foreach (var r in c.Replies)
+                            {
+                                <li class="bdc__item bdc__item--reply" id="comment-@r.Id">
+                                    <p class="bdc__meta"><strong class="bdc__name">@r.Name</strong> @if (r.IsSiteReply) { <span class="bdc__badge">Reply</span> } <time datetime="@r.CreatedUtc.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'")">@r.CreatedUtc.ToString("d MMM yyyy")</time></p>
+                                    @if (r.ReplyingTo is not null)
+                                    {
+                                        <p class="bdc__replying">Replying to @r.ReplyingTo</p>
+                                    }
+                                    <p class="bdc__body">@r.Body</p>
+                                </li>
+                            }
+                        </ol>
+                    }
                 </li>
             }
         </ol>
@@ -48,7 +64,7 @@
         <p class="bdc__field">
             <label for="bdc-email">Email@(Model.RequireEmail ? "" : " (optional)")</label>
             <input id="bdc-email" name="email" type="email" maxlength="@Model.MaxEmailLength" autocomplete="email" required="@Model.RequireEmail" aria-describedby="bdc-email-hint" />
-            <span class="bdc__hint" id="bdc-email-hint">Never shown on the page.</span>
+            <span class="bdc__hint" id="bdc-email-hint">Never shown on the page. Used only to email you if someone replies.</span>
         </p>
         <p class="bdc__field">
             <label for="bdc-body">Comment</label>

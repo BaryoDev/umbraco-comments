@@ -38,3 +38,8 @@
 .bdc-err { padding: 8px 12px; background: #fdeae4; border: 1px solid var(--orange); border-radius: 6px; }
 .bdc-count { display: inline-block; padding: 0 8px; margin-left: 4px; border-radius: 10px; font-size: 12px; background: var(--mint); color: var(--green-deep); }
 .bdc-tab[aria-pressed="true"] .bdc-count { background: #fff; }
+.bdc-ok { padding: 8px 12px; background: var(--mint); border: 1px solid var(--green); border-radius: 6px; }
+.bdc-item__reply { font-size: 13px; font-weight: 600; color: var(--green-deep); }
+.bdc-reply { display: grid; gap: 8px; }
+.bdc-reply__text { width: 100%; font: inherit; padding: 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical; }
+.bdc-reply__check { display: flex; align-items: center; gap: 6px; font-size: 13px; }
