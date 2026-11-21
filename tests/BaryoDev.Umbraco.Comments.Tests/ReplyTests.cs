@@ -275,6 +275,18 @@ public class ReplyTests
     }
 
     [Fact]
+    public void ReplyLink_keeps_only_the_path_of_an_absolute_page_url()
+    {
+        // Umbraco returns an absolute URL in Relative mode when the page's domain is not the request's host.
+        Guid id = Guid.NewGuid();
+
+        Assert.Equal($"https://baryo.dev/blog/post/?a=1#comment-{id}",
+            CommentReplyEmail.ReplyLink("https://baryo.dev", "https://edit.baryo.dev/blog/post/?a=1", id));
+        Assert.Equal($"https://edit.baryo.dev/blog/post/#comment-{id}",
+            CommentReplyEmail.ReplyLink(null, "https://edit.baryo.dev/blog/post/", id));
+    }
+
+    [Fact]
     public void Email_encodes_html_and_flattens_the_subject()
     {
         var parent = Parent();

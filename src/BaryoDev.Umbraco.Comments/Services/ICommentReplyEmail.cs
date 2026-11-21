@@ -58,7 +58,8 @@ public sealed class CommentReplyEmail(
             html,
             true,
             null);
-        await sender.SendAsync(message, EmailType, false, null);
+        // true lets a SendEmailNotification handler deliver it, which CanSendRequiredEmail also counts.
+        await sender.SendAsync(message, EmailType, true, null);
     }
 
     /// <summary>The link to the reply on the public page. Empty when the page has no URL.</summary>
@@ -69,9 +70,17 @@ public sealed class CommentReplyEmail(
             return string.Empty;
         }
         string anchor = "#comment-" + replyId;
-        return string.IsNullOrWhiteSpace(publicBaseUrl)
-            ? pageUrl + anchor
-            : publicBaseUrl.TrimEnd('/') + pageUrl + anchor;
+        if (string.IsNullOrWhiteSpace(publicBaseUrl))
+        {
+            return pageUrl + anchor;
+        }
+        // Relative mode still gives an absolute URL when the page has a domain other than the request's host.
+        // Check the scheme: on Unix a path like /blog/post/ parses as an absolute file URI.
+        string path = Uri.TryCreate(pageUrl, UriKind.Absolute, out Uri? absolute)
+            && (absolute.Scheme == Uri.UriSchemeHttp || absolute.Scheme == Uri.UriSchemeHttps)
+            ? absolute.PathAndQuery
+            : pageUrl;
+        return publicBaseUrl.TrimEnd('/') + path + anchor;
     }
 
     internal static (string Subject, string Html) Compose(CommentRow parent, CommentRow reply, string pageName, string link)
