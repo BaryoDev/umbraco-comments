@@ -5,7 +5,20 @@ using Microsoft.Extensions.Options;
 
 namespace BaryoDev.Umbraco.Comments;
 
-public sealed record CommentView(string Name, DateTime CreatedUtc, string Body);
+public sealed record CommentView(string Name, DateTime CreatedUtc, string Body)
+{
+    /// <summary>The comment id, used for the page anchor.</summary>
+    public Guid Id { get; init; }
+
+    /// <summary>Approved replies, oldest first. Empty for a reply and on the 0.2.0 path.</summary>
+    public IReadOnlyList<CommentView> Replies { get; init; } = [];
+
+    /// <summary>The name of the comment this one answers. Null for a top-level comment.</summary>
+    public string? ReplyingTo { get; init; }
+
+    /// <summary>True when a backoffice user wrote the reply.</summary>
+    public bool IsSiteReply { get; init; }
+}
 
 public sealed record CommentsModel(
     Guid ContentKey,
@@ -103,14 +116,57 @@ public sealed class CommentsViewComponent(ICommentRepository repository, FormTok
         return (page, pageSize, pageCount, (page - 1) * pageSize);
     }
 
+    /// <summary>Parents in the order given, each with its replies oldest first. Replies without a listed parent are dropped.</summary>
+    internal static IReadOnlyList<CommentView> Thread(IReadOnlyList<CommentRow> parents, IReadOnlyList<CommentRow> replies)
+    {
+        var byParent = replies
+            .Where(r => r.ParentId is not null)
+            .GroupBy(r => r.ParentId!.Value)
+            .ToDictionary(g => g.Key, g => g.OrderBy(r => r.CreatedUtc).ThenBy(r => r.Id).ToList());
+
+        return parents.Select(p =>
+        {
+            IReadOnlyList<CommentView> children = byParent.TryGetValue(p.Id, out var rows)
+                ? rows.Select(r => new CommentView(r.Name, r.CreatedUtc, r.Body)
+                {
+                    Id = r.Id,
+                    ReplyingTo = p.Name,
+                    IsSiteReply = r.AuthorUserKey is not null,
+                }).ToList()
+                : [];
+            return new CommentView(p.Name, p.CreatedUtc, p.Body)
+            {
+                Id = p.Id,
+                Replies = children,
+                IsSiteReply = p.AuthorUserKey is not null,
+            };
+        }).ToList();
+    }
+
     public IViewComponentResult Invoke(Guid contentKey)
     {
         CommentsOptions o = options.Value;
-        int total = repository.CountApproved(contentKey);
-        var (page, pageSize, pageCount, skip) = Window(total, o.PageSize, Request.Query["bdcp"].FirstOrDefault());
-        var comments = repository.ListApproved(contentKey, skip, pageSize)
-            .Select(r => new CommentView(r.Name, r.CreatedUtc, r.Body))
-            .ToList();
+        int total;
+        IReadOnlyList<CommentView> comments;
+        int page, pageCount;
+        if (repository is ICommentRepositoryThreaded threaded)
+        {
+            total = threaded.CountApprovedTopLevel(contentKey);
+            int pageSize, skip;
+            (page, pageSize, pageCount, skip) = Window(total, o.PageSize, Request.Query["bdcp"].FirstOrDefault());
+            var parents = threaded.ListApprovedTopLevel(contentKey, skip, pageSize);
+            var replies = threaded.ListReplies(parents.Select(p => p.Id).ToList());
+            comments = Thread(parents, replies);
+        }
+        else
+        {
+            total = repository.CountApproved(contentKey);
+            int pageSize, skip;
+            (page, pageSize, pageCount, skip) = Window(total, o.PageSize, Request.Query["bdcp"].FirstOrDefault());
+            comments = repository.ListApproved(contentKey, skip, pageSize)
+                .Select(r => new CommentView(r.Name, r.CreatedUtc, r.Body) { Id = r.Id })
+                .ToList();
+        }
 
         string? code = Request.Query["bdc"].FirstOrDefault();
         string? notice = code is not null && Messages.TryGetValue(code, out var m) ? m : null;
