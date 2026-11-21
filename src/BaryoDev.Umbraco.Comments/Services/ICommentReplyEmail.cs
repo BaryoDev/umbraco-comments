@@ -87,8 +87,8 @@ public sealed class CommentReplyEmail(
     {
         string subject = $"{reply.Name} replied to your comment on {pageName}".Replace('\r', ' ').Replace('\n', ' ');
 
-        int cut = char.IsHighSurrogate(parent.Body.Length > 499 ? parent.Body[499] : 'a') ? 499 : 500;
-        string quoted = parent.Body.Length > 500 ? parent.Body[..cut] : parent.Body;
+        // Cut at 499 when 500 would split an emoji's surrogate pair.
+        string quoted = parent.Body.Length <= 500 ? parent.Body : parent.Body[..(char.IsHighSurrogate(parent.Body[499]) ? 499 : 500)];
         string E(string s) => WebUtility.HtmlEncode(s);
 
         var sb = new StringBuilder();
