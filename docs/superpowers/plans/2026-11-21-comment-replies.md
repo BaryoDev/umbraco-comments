@@ -24,7 +24,7 @@
 2. **No SMTP.** Umbraco's `EmailSender.SendAsync` returns silently when SMTP is not configured. The reply must report "not emailed" and stay sendable later, never "emailed". Pinned by `Notify_without_smtp_is_CannotSend_and_leaves_it_unsent` (Task 2).
 3. **Wrong link host.** The API runs on the backoffice host (`edit.baryo.dev`, behind Cloudflare Access), so an absolute URL built from the request would send readers to a login wall. Pinned by `ReplyLink_uses_PublicBaseUrl` (Task 2).
 4. **Hostile names.** A commenter name or page name holding `<script>`, or a subject holding CR/LF, must come out encoded in the body and on one line in the subject. Pinned by `Email_encodes_html_and_flattens_the_subject` (Task 2).
-5. **Parent gone or spam.** Deleting a comment removes its replies. Marking it spam hides them. Retention deleting old spam leaves no orphan replies. Pinned by `Delete_removes_replies`, `Retention_removes_orphan_replies` (Task 1) and `Replies_of_a_spam_comment_are_hidden` (Task 4).
+5. **Parent gone or spam.** Deleting a comment removes its replies. Marking it spam hides them. Retention deleting old spam leaves no orphan replies. Pinned by `Delete_removes_replies`, `Retention_removes_orphan_replies` (Task 1) and `Replies_of_a_spam_comment_are_hidden` (Task 4, `ReplyPagingTests`).
 
 ---
 
@@ -200,11 +200,12 @@ public interface ICommentReplyEmail
 - Modify: `src/BaryoDev.Umbraco.Comments/CommentsViewComponent.cs`
 - Modify: `src/BaryoDev.Umbraco.Comments/Views/Shared/Components/BaryoComments/Default.cshtml`
 - Modify: `src/BaryoDev.Umbraco.Comments/wwwroot/App_Plugins/BaryoDev.Comments/comments.css`
-- Test: `tests/BaryoDev.Umbraco.Comments.IntegrationTests/ReplyViewTests.cs` (new)
+- Test: `tests/BaryoDev.Umbraco.Comments.Tests/ReplyViewTests.cs` (new, xUnit) and `tests/BaryoDev.Umbraco.Comments.IntegrationTests/ReplyPagingTests.cs` (new). The test projects never render Razor views, so markup is checked against the view source.
 
 **Interfaces:**
 - Consumes: `ICommentRepositoryThreaded` (Task 1).
 - Produces, on `CommentView`, `init` properties: `Guid Id`, `IReadOnlyList<CommentView> Replies` (default empty), `string? ReplyingTo` and `bool IsSiteReply`.
+- Produces `internal static IReadOnlyList<CommentView> Thread(IReadOnlyList<CommentRow> parents, IReadOnlyList<CommentRow> replies)` on `CommentsViewComponent`: parents in the order given, each with its replies oldest first, `ReplyingTo` set to the parent name and `IsSiteReply` set from `AuthorUserKey`. Replies whose parent is not in `parents` are dropped.
 
 **Behavior:**
 - With `ICommentRepositoryThreaded`, the page count, the window and the list use the top-level members, and replies come from one `ListReplies` call for the page's parent ids. Without it, the 0.2.0 path is unchanged.
@@ -213,15 +214,18 @@ public interface ICommentReplyEmail
 - The email hint becomes `Never shown on the page. Used only to email you if someone replies.`
 - CSS: indent replies and style the badge with the existing `comments.css` variables. No new colors outside them.
 
-- [ ] **Step 1: Write the failing tests** in `ReplyViewTests`:
-  - `Replies_render_under_their_parent_with_anchor_and_badge`
-  - `Paging_counts_top_level_comments_only`: with `PageSize` 2, 3 top-level comments and 4 replies give 2 pages.
-  - `Replies_of_a_spam_comment_are_hidden`
-  - `A_visitor_using_the_owner_name_gets_no_badge`
-  - `Email_hint_says_it_is_used_for_replies`
+- [ ] **Step 1: Write the failing tests.**
+  - In `ReplyViewTests` (unit):
+    - `Thread_puts_replies_under_their_parent_oldest_first`
+    - `Thread_drops_replies_without_a_listed_parent`
+    - `A_visitor_using_the_owner_name_gets_no_badge`: a top-level row named like the owner, with no `AuthorUserKey`, has `IsSiteReply` false.
+    - `View_markup_has_anchor_badge_and_reply_hint`: reads `Default.cshtml` from the source tree and asserts it contains `id="comment-@`, `bdc__replies`, `bdc__badge` and the new hint text.
+  - In `ReplyPagingTests` (integration):
+    - `Paging_counts_top_level_comments_only`: 3 top-level comments and 4 replies with page size 2 give `Window(...).PageCount == 2`.
+    - `Replies_of_a_spam_comment_are_hidden`: after the parent is marked spam, the page's thread holds neither the parent nor its replies.
 - [ ] **Step 2:** Implement.
 - [ ] **Step 3:** `dotnet build -c Release`.
-- [ ] **Step 4:** Session queues `ReplyViewTests`, `CommentFlowTests` and `ApiCompatTests`.
+- [ ] **Step 4:** Session queues `ReplyViewTests`, `ReplyPagingTests`, `CommentFlowTests` and `ApiCompatTests`.
 - [ ] **Step 5:** Commit `show replies under comments on the page`.
 
 ### Task 5: Docs
