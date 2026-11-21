@@ -1,6 +1,7 @@
 using BaryoDev.Umbraco.Comments.Api;
 using BaryoDev.Umbraco.Comments.Data;
 using BaryoDev.Umbraco.Comments.Services;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -63,7 +64,10 @@ public class ReplyApiTests : UmbracoIntegrationTest
         var security = Stub.Make<IBackOfficeSecurity>(("get_CurrentUser", _ => user));
         var permissions = Stub.Make<IContentPermissionService>(("AuthorizeAccessAsync",
             permission ?? (_ => Task.FromResult(ContentAuthorizationStatus.UnauthorizedMissingPermissionAccess))));
-        return ActivatorUtilities.CreateInstance<CommentsApiController>(Services, new FixedAccessor(security), permissions);
+        var controller = ActivatorUtilities.CreateInstance<CommentsApiController>(Services, new FixedAccessor(security), permissions);
+        // The endpoints read HttpContext.RequestAborted, as they do in a real request.
+        controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        return controller;
     }
 
     private CommentsApiController Admin() =>

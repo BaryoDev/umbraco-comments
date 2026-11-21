@@ -85,6 +85,7 @@ class CommentsDashboard extends Base {
 
   async #act(id, action) {
     if (action === "delete" && !confirm("Delete this comment for good?")) return;
+    this.#note = "";
     this.#busy = true;
     this.#render();
     try {
@@ -127,15 +128,20 @@ class CommentsDashboard extends Base {
   async #sendEmail(id) {
     this.#busy = true;
     this.#render();
+    let error = "";
     try {
       await call(this, `/${id}/notify`, "POST");
       this.#note = "Email sent.";
-      this.#error = "";
     } catch (e) {
-      this.#error = e.message;
+      error = e.message;
       this.#note = "";
     }
+    // Reload either way so a 409 shows the row as emailed, then show the error, which the reload clears.
     await this.#load();
+    if (error) {
+      this.#error = error;
+      this.#render();
+    }
   }
 
   #render() {
@@ -193,6 +199,7 @@ class CommentsDashboard extends Base {
       </div>`;
     this.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
       this.#status = b.dataset.tab;
+      this.#note = "";
       this.#skip = 0;
       this.#load();
     }));
