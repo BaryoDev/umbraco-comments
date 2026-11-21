@@ -8,21 +8,14 @@ public sealed class AddReplyColumns(IMigrationContext context) : AsyncMigrationB
 
     protected override Task MigrateAsync()
     {
-        if (!ColumnExists(CommentRow.TableName, "ParentId"))
-        {
-            Alter.Table(CommentRow.TableName).AddColumn("ParentId").AsGuid().Nullable().Do();
-        }
-        if (!ColumnExists(CommentRow.TableName, "AuthorUserKey"))
-        {
-            Alter.Table(CommentRow.TableName).AddColumn("AuthorUserKey").AsGuid().Nullable().Do();
-        }
-        if (!ColumnExists(CommentRow.TableName, "NotifiedUtc"))
-        {
-            Alter.Table(CommentRow.TableName).AddColumn("NotifiedUtc").AsDateTime().Nullable().Do();
-        }
+        // Not Alter.Table: on SQLite it throws. These helpers write ALTER TABLE ADD COLUMN, which SQLite accepts,
+        // and skip a column that already exists.
+        AddColumn<CommentRow>(CommentRow.TableName, "ParentId");
+        AddColumn<CommentRow>(CommentRow.TableName, "AuthorUserKey");
+        AddColumn<CommentRow>(CommentRow.TableName, "NotifiedUtc");
         if (!IndexExists(ParentIndex))
         {
-            Create.Index(ParentIndex).OnTable(CommentRow.TableName).OnColumn("ParentId").Ascending().WithOptions().NonClustered().Do();
+            CreateIndex<CommentRow>(ParentIndex);
         }
         return Task.CompletedTask;
     }
