@@ -26,6 +26,16 @@ public sealed class CommentsOptionsValidator : IValidateOptions<CommentsOptions>
         {
             errors.Add("PendingRetentionDays must be between 1 and 36500. Use null to keep pending comments.");
         }
+        if (options.ReplyTo is not null && !System.Net.Mail.MailAddress.TryCreate(options.ReplyTo, out _))
+        {
+            errors.Add("ReplyTo must be an email address. Use null to leave it out.");
+        }
+        if (options.PublicBaseUrl is not null
+            && !(Uri.TryCreate(options.PublicBaseUrl, UriKind.Absolute, out Uri? baseUrl)
+                && (baseUrl.Scheme == Uri.UriSchemeHttp || baseUrl.Scheme == Uri.UriSchemeHttps)))
+        {
+            errors.Add("PublicBaseUrl must be an absolute http or https URL. Use null to use the URL Umbraco builds.");
+        }
         return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
     }
 }

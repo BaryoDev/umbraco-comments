@@ -33,5 +33,7 @@ public sealed class CommentsComposer : IComposer
         services.AddSingleton<RateLimiter>();
         services.AddSingleton<FormToken>();
         services.AddTransient<CommentSubmission>();
+        services.TryAddSingleton<ICommentReplyEmail, CommentReplyEmail>();
+        services.AddTransient<CommentReplies>();
     }
 }
