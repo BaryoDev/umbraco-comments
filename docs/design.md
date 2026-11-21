@@ -15,8 +15,11 @@ One table, `baryoComment`, created by a package migration plan.
 | Body | nvarchar(4000) | Plain text. Encoded on render. |
 | Status | int | 0 pending, 1 approved, 2 spam |
 | CreatedUtc | datetime | |
+| ParentId | Guid, null | Set on a reply, the comment it answers. Indexed. Added in 0.3.0. |
+| AuthorUserKey | Guid, null | Backoffice user who wrote the reply. Added in 0.3.0. |
+| NotifiedUtc | datetime, null | When the reply email was claimed. Set by one conditional update, so it is sent once. Added in 0.3.0. |
 
-No IP address is stored. Delete removes the row.
+No IP address is stored. Delete removes the row and its replies. Retention also removes replies whose comment is gone.
 
 ## Endpoints
 
@@ -30,6 +33,10 @@ Management API (backoffice token, content section access), under `/umbraco/manag
 - `POST {id}/approve`
 - `POST {id}/spam`
 - `DELETE {id}`
+- `POST {id}/reply` with `{ body, notify }`. 201 with `{ id, emailed, emailStatus }`. 400 when the comment is not approved, is itself a reply, or the body is out of range.
+- `POST {id}/notify` emails the commenter about reply `{id}`. 204 when sent, 409 when already sent, 503 when email is not set up, 502 when the send failed (it can be tried again).
+
+Every route checks Browse on the comment's page.
 
 ## Abuse controls
 
@@ -51,13 +58,13 @@ Management API (backoffice token, content section access), under `/umbraco/manag
 
 ## Options
 
-Section `BaryoDev:Comments`: `AutoApprove` (false), `RequireEmail` (false), `MaxNameLength`, `MaxEmailLength`, `MaxBodyLength`, `MinBodyLength`, `MinSecondsOnForm`, `MaxFormAgeMinutes`, `RateLimitMaxPosts`, `RateLimitWindowMinutes`, `PageSize`.
+Section `BaryoDev:Comments`: `AutoApprove` (false), `RequireEmail` (false), `MaxNameLength`, `MaxEmailLength`, `MaxBodyLength`, `MinBodyLength`, `MinSecondsOnForm`, `MaxFormAgeMinutes`, `RateLimitMaxPosts`, `RateLimitWindowMinutes`, `PageSize`, `ReplyTo`, `PublicBaseUrl`.
 
 ## Not in v1 (paid tier candidates)
 
 - Visitor sign-in
-- Threaded replies
+- Replies from visitors, and replies more than one level deep
 - Reactions
-- Notification emails to editors and to commenters
+- Notification emails to editors when a comment arrives
 - Shared spam signals across sites
 - Persistent rate limits across several servers
