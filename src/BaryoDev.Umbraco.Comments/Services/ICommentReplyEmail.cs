@@ -87,7 +87,8 @@ public sealed class CommentReplyEmail(
     {
         string subject = $"{reply.Name} replied to your comment on {pageName}".Replace('\r', ' ').Replace('\n', ' ');
 
-        string quoted = parent.Body.Length > 500 ? parent.Body[..500] : parent.Body;
+        int cut = char.IsHighSurrogate(parent.Body.Length > 499 ? parent.Body[499] : 'a') ? 499 : 500;
+        string quoted = parent.Body.Length > 500 ? parent.Body[..cut] : parent.Body;
         string E(string s) => WebUtility.HtmlEncode(s);
 
         var sb = new StringBuilder();

@@ -203,6 +203,25 @@ public class ReplyApiTests : UmbracoIntegrationTest
         Assert.That(Items(await Admin().List(status: "pending")).Single().CanReply, Is.False);
     }
 
+    [Test]
+    public async Task Reply_under_a_spam_parent_cannot_be_emailed()
+    {
+        var page = Guid.NewGuid();
+        var parent = Row(page, CommentStatus.Spam, 1, "Ana", "ana@example.com");
+        var reply = Row(page, CommentStatus.Approved, 2, "Site A", parent: parent.Id);
+        reply.AuthorUserKey = Constants.Security.SuperUserKey;
+        Comments.Add(parent);
+        Comments.Add(reply);
+
+        var approved = Items(await Admin().List(status: "approved")).Single(i => i.Name == "Site A");
+        var result = await Admin().Notify(reply.Id);
+
+        Assert.That(approved.CanNotify, Is.False);
+        Assert.That(result, Is.InstanceOf<BadRequestObjectResult>());
+        Assert.That(_email.Sent, Is.Empty);
+        Assert.That(Comments.Get(reply.Id)!.NotifiedUtc, Is.Null);
+    }
+
     private sealed class FakeReplyEmail : ICommentReplyEmail
     {
         public bool CanSend { get; set; } = true;

@@ -34,7 +34,7 @@ Management API (backoffice token, content section access), under `/umbraco/manag
 - `POST {id}/spam`
 - `DELETE {id}`
 - `POST {id}/reply` with `{ body, notify }`. 201 with `{ id, emailed, emailStatus }`. 400 when the comment is not approved, is itself a reply, or the body is out of range.
-- `POST {id}/notify` emails the commenter about reply `{id}`. 204 when sent, 409 when already sent, 503 when email is not set up, 502 when the send failed (it can be tried again).
+- `POST {id}/notify` emails the commenter about reply `{id}`. 204 when sent, 400 when the reply or its comment is not approved, 409 when already sent, 503 when email is not set up, 502 when the send failed (it can be tried again).
 
 Every route checks Browse on the comment's page.
 

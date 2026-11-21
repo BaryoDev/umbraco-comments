@@ -6,7 +6,7 @@ namespace BaryoDev.Umbraco.Comments.Services;
 
 public enum ReplyResult { Saved, NotFound, NotApproved, IsReply, BodyInvalid, Unsupported }
 
-public enum NotifyResult { Sent, NotFound, NotAReply, AlreadySent, NoEmail, CannotSend, Failed, Unsupported }
+public enum NotifyResult { Sent, NotFound, NotAReply, AlreadySent, NoEmail, CannotSend, Failed, Unsupported, NotApproved }
 
 public sealed record ReplyAuthor(Guid UserKey, string Name);
 
@@ -100,11 +100,19 @@ public sealed class CommentReplies(
         {
             return NotifyResult.AlreadySent;
         }
+        if (reply.Status != (int)CommentStatus.Approved)
+        {
+            return NotifyResult.NotApproved;
+        }
 
         CommentRow? parent = repository.Get(parentId);
         if (parent is null || string.IsNullOrWhiteSpace(parent.Email))
         {
             return NotifyResult.NoEmail;
+        }
+        if (parent.Status != (int)CommentStatus.Approved)
+        {
+            return NotifyResult.NotApproved;
         }
         // Umbraco's sender returns without sending when SMTP is not set, so claim nothing here.
         if (!email.CanSend)
@@ -123,7 +131,14 @@ public sealed class CommentReplies(
         }
         catch (Exception ex)
         {
-            threaded.ReleaseNotify(replyId);
+            try
+            {
+                threaded.ReleaseNotify(replyId);
+            }
+            catch (Exception releaseEx)
+            {
+                logger.LogWarning(releaseEx, "The email claim for comment {ReplyId} could not be released.", replyId);
+            }
             logger.LogWarning(ex, "Reply email for comment {ReplyId} failed and can be sent again.", replyId);
             return NotifyResult.Failed;
         }

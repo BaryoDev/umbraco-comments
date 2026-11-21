@@ -12,6 +12,7 @@
 - New options `ReplyTo` (reply-to address on the email) and `PublicBaseUrl` (host for the link in the email, for a backoffice on another host). Both are validated at startup.
 - The form's email hint now reads "Never shown on the page. Used only to email you if someone replies."
 - Replies need a repository that implements the new `ICommentRepositoryThreaded`. The built-in one does. `ICommentRepository` and `ICommentRepositoryScoped` are unchanged.
+- `CommentsApiController` takes two more constructor parameters (`CommentReplies`, `IOptions<CommentsOptions>`). MVC creates it, so only code that constructs it by hand needs to change.
 
 ## 0.2.0
 

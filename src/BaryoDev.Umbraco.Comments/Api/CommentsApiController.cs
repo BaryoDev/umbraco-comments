@@ -96,7 +96,8 @@ public sealed class CommentsApiController(
                 IsSiteReply = r.AuthorUserKey is not null,
                 NotifiedUtc = r.NotifiedUtc is DateTime notified ? DateTime.SpecifyKind(notified, DateTimeKind.Utc) : null,
                 CanReply = threaded && r.Status == (int)CommentStatus.Approved && r.ParentId is null,
-                CanNotify = r.ParentId is not null && r.NotifiedUtc is null && !string.IsNullOrWhiteSpace(parent?.Email),
+                CanNotify = r.ParentId is not null && r.NotifiedUtc is null && r.Status == (int)CommentStatus.Approved
+                    && parent?.Status == (int)CommentStatus.Approved && !string.IsNullOrWhiteSpace(parent.Email),
             });
         }
         int total = parsed switch { CommentStatus.Pending => counts.Pending, CommentStatus.Approved => counts.Approved, _ => counts.Spam };
@@ -179,6 +180,7 @@ public sealed class CommentsApiController(
             NotifyResult.NotFound => NotFound(),
             NotifyResult.NotAReply => BadRequest(new { error = "This comment is not a reply." }),
             NotifyResult.NoEmail => BadRequest(new { error = "The commenter left no email address." }),
+            NotifyResult.NotApproved => BadRequest(new { error = "Only replies under an approved comment can be emailed." }),
             NotifyResult.AlreadySent => Conflict(new { error = "This reply was already emailed." }),
             NotifyResult.CannotSend => StatusCode(StatusCodes.Status503ServiceUnavailable, new { error = "Email is not set up on this site." }),
             NotifyResult.Failed => StatusCode(StatusCodes.Status502BadGateway, new { error = "The email could not be sent. Try again later." }),

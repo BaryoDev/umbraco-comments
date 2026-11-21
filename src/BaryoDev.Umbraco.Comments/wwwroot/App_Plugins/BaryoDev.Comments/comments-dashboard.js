@@ -6,6 +6,7 @@ const REASONS = {
   cannotsend: "email is not set up on this site",
   failed: "the send failed, use Send email to try again",
   noemail: "no email address",
+  notapproved: "the comment is not approved",
 };
 const TABS = [["pending", "Pending"], ["approved", "Approved"], ["spam", "Spam"]];
 

@@ -43,8 +43,14 @@ public class ReplyTests
             }
         }
 
+        public bool ThrowOnRelease { get; set; }
+
         public void ReleaseNotify(Guid replyId)
         {
+            if (ThrowOnRelease)
+            {
+                throw new InvalidOperationException("database down");
+            }
             lock (Rows)
             {
                 Get(replyId)!.NotifiedUtc = null;
@@ -264,6 +270,77 @@ public class ReplyTests
         email.Throw = false;
         Assert.Equal(NotifyResult.Sent, await service.NotifyAsync(outcome.ReplyId!.Value, TestContext.Current.CancellationToken));
         Assert.Single(email.Sent);
+    }
+
+    [Fact]
+    public async Task Notify_is_NotApproved_when_the_parent_is_spam()
+    {
+        var repo = new ThreadedRepo();
+        var parent = Parent();
+        repo.Add(parent);
+        var email = new RecordingEmail();
+        var service = Build(repo, email);
+        var outcome = await service.ReplyAsync(parent.Id, "Thanks for trying it", false, Author, TestContext.Current.CancellationToken);
+        parent.Status = (int)CommentStatus.Spam;
+
+        var result = await service.NotifyAsync(outcome.ReplyId!.Value, TestContext.Current.CancellationToken);
+
+        Assert.Equal(NotifyResult.NotApproved, result);
+        Assert.Empty(email.Sent);
+        Assert.Null(repo.Get(outcome.ReplyId!.Value)!.NotifiedUtc);
+    }
+
+    [Theory]
+    [InlineData(CommentStatus.Spam)]
+    [InlineData(CommentStatus.Pending)]
+    public async Task Notify_is_NotApproved_when_the_reply_is_not_approved(CommentStatus status)
+    {
+        var repo = new ThreadedRepo();
+        var parent = Parent();
+        repo.Add(parent);
+        var email = new RecordingEmail();
+        var service = Build(repo, email);
+        var outcome = await service.ReplyAsync(parent.Id, "Thanks for trying it", false, Author, TestContext.Current.CancellationToken);
+        repo.Get(outcome.ReplyId!.Value)!.Status = (int)status;
+
+        var result = await service.NotifyAsync(outcome.ReplyId!.Value, TestContext.Current.CancellationToken);
+
+        Assert.Equal(NotifyResult.NotApproved, result);
+        Assert.Empty(email.Sent);
+        Assert.Null(repo.Get(outcome.ReplyId!.Value)!.NotifiedUtc);
+    }
+
+    [Fact]
+    public async Task Notify_failure_still_returns_Failed_when_the_release_throws()
+    {
+        var repo = new ThreadedRepo { ThrowOnRelease = true };
+        var parent = Parent();
+        repo.Add(parent);
+        var email = new RecordingEmail { Throw = true };
+        var service = Build(repo, email);
+        var outcome = await service.ReplyAsync(parent.Id, "Thanks for trying it", false, Author, TestContext.Current.CancellationToken);
+
+        var result = await service.NotifyAsync(outcome.ReplyId!.Value, TestContext.Current.CancellationToken);
+
+        Assert.Equal(NotifyResult.Failed, result);
+    }
+
+    [Fact]
+    public void Email_quote_does_not_split_a_surrogate_pair()
+    {
+        var parent = Parent();
+        parent.Body = new string('a', 499) + "\U0001F600 and more text";
+        var reply = Parent(parentId: parent.Id);
+
+        var (_, html) = CommentReplyEmail.Compose(parent, reply, "Page", "");
+
+        for (int i = 0; i < html.Length; i++)
+        {
+            if (char.IsHighSurrogate(html[i]))
+            {
+                Assert.True(i + 1 < html.Length && char.IsLowSurrogate(html[i + 1]), "lone high surrogate");
+            }
+        }
     }
 
     [Fact]
