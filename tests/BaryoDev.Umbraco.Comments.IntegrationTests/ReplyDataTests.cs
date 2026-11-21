@@ -8,6 +8,7 @@ using Umbraco.Cms.Core.Migrations;
 using Umbraco.Cms.Core.Packaging;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Infrastructure.Install;
+using Umbraco.Cms.Infrastructure.Migrations;
 using Umbraco.Cms.Infrastructure.Scoping;
 using Umbraco.Cms.Tests.Common.Testing;
 using Umbraco.Cms.Tests.Integration.Testing;
@@ -34,9 +35,18 @@ public class ReplyDataTests : UmbracoIntegrationTest
     public async Task RunPackageMigration()
     {
         var runner = Services.GetRequiredService<PackageMigrationRunner>();
-        await runner.RunPackageMigrationsIfPendingAsync(PlanName);
+        AssertRan(await runner.RunPackageMigrationsIfPendingAsync(PlanName));
 
         Assert.That(TableExists(), Is.True);
+    }
+
+    // The runner reports a failed plan in its result instead of throwing.
+    private static void AssertRan(IEnumerable<ExecutedMigrationPlan> executed)
+    {
+        foreach (ExecutedMigrationPlan plan in executed)
+        {
+            Assert.That(plan.Successful, Is.True, plan.Exception?.ToString());
+        }
     }
 
     private bool TableExists()
@@ -95,7 +105,9 @@ public class ReplyDataTests : UmbracoIntegrationTest
         Services.GetRequiredService<IKeyValueService>().SetValue(Constants.Conventions.Migrations.KeyValuePrefix + PlanName, CreateTablesStep);
 
         var runner = Services.GetRequiredService<PackageMigrationRunner>();
-        await runner.RunPackageMigrationsIfPendingAsync(PlanName);
+        var executed = (await runner.RunPackageMigrationsIfPendingAsync(PlanName)).ToList();
+        Assert.That(executed, Has.Count.EqualTo(1), "the plan was not pending");
+        AssertRan(executed);
 
         Assert.That(Columns(), Is.SupersetOf(new[] { "ParentId", "AuthorUserKey", "NotifiedUtc" }));
         var old = Comments.Get(oldId);
