@@ -36,4 +36,17 @@ public sealed class CommentRow
 
     [Column("CreatedUtc")]
     public DateTime CreatedUtc { get; set; }
+
+    [Column("ParentId")]
+    [Index(IndexTypes.NonClustered, Name = "IX_baryoComment_ParentId")]
+    [NullSetting(NullSetting = NullSettings.Null)]
+    public Guid? ParentId { get; set; }
+
+    [Column("AuthorUserKey")]
+    [NullSetting(NullSetting = NullSettings.Null)]
+    public Guid? AuthorUserKey { get; set; }
+
+    [Column("NotifiedUtc")]
+    [NullSetting(NullSetting = NullSettings.Null)]
+    public DateTime? NotifiedUtc { get; set; }
 }

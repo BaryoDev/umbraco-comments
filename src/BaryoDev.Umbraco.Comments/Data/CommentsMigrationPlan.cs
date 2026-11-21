@@ -6,6 +6,7 @@ public sealed class CommentsMigrationPlan() : PackageMigrationPlan("BaryoDev.Umb
 {
     protected override void DefinePlan()
     {
-        To<CreateTables>("b3d7c1a4-5e02-4f6a-8a31-7c9e0d2f4b18");
+        To<CreateTables>("b3d7c1a4-5e02-4f6a-8a31-7c9e0d2f4b18")
+            .To<AddReplyColumns>("5f1c9e72-3a4d-4b8e-9c06-d2e7a1b84f35");
     }
 }
