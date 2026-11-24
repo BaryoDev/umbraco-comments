@@ -21,6 +21,10 @@ public sealed record CommentItem(Guid Id, Guid ContentKey, string? PageName, str
 {
     public Guid? ParentId { get; init; }
     public string? ParentName { get; init; }
+    /// <summary>The parent's status in lower case, or null when there is no parent or it is gone.</summary>
+    public string? ParentStatus { get; init; }
+    /// <summary>True when the parent has an email address. The address itself is not exposed.</summary>
+    public bool ParentHasEmail { get; init; }
     /// <summary>True for a reply written by a backoffice user.</summary>
     public bool IsSiteReply { get; init; }
     public DateTime? NotifiedUtc { get; init; }
@@ -93,6 +97,8 @@ public sealed class CommentsApiController(
             {
                 ParentId = r.ParentId,
                 ParentName = parent?.Name,
+                ParentStatus = parent is null ? null : ((CommentStatus)parent.Status).ToString().ToLowerInvariant(),
+                ParentHasEmail = parent is not null && !string.IsNullOrWhiteSpace(parent.Email),
                 IsSiteReply = r.AuthorUserKey is not null,
                 NotifiedUtc = r.NotifiedUtc is DateTime notified ? DateTime.SpecifyKind(notified, DateTimeKind.Utc) : null,
                 CanReply = threaded && r.Status == (int)CommentStatus.Approved && r.ParentId is null,

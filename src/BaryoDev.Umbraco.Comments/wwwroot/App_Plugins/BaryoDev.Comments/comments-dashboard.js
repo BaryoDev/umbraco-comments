@@ -172,7 +172,7 @@ class CommentsDashboard extends Base {
           ${items.length === 0 ? `<p class="bdc-note">${this.#busy ? "Loading." : "Nothing here."}</p>` : items.map((c) => `
             <div class="bdc-item">
               <div class="bdc-item__meta">${esc(c.name)}${c.email ? ` (${esc(c.email)})` : ""} on ${esc(c.pageName ?? c.contentKey)} at ${esc(when(c.createdUtc))}</div>
-              ${c.parentId ? `<div class="bdc-item__reply">Reply to ${esc(c.parentName ?? "a deleted comment")}${c.isSiteReply ? " (site reply)" : ""}. ${c.notifiedUtc ? `Emailed ${esc(when(c.notifiedUtc))}` : "Not emailed"}</div>` : ""}
+              ${c.parentId ? `<div class="bdc-item__reply">Reply to ${esc(c.parentName ?? "a deleted comment")}${c.isSiteReply ? " (site reply)" : ""}. ${c.notifiedUtc ? `Emailed ${esc(when(c.notifiedUtc))}` : c.parentHasEmail ? "Not emailed" : "No email address"}.${c.parentStatus !== "approved" ? " Hidden on the page while the comment is not approved." : ""}</div>` : ""}
               <p class="bdc-item__body">${esc(c.body)}</p>
               ${this.#replyFor === c.id ? `
               <div class="bdc-reply">
@@ -200,22 +200,29 @@ class CommentsDashboard extends Base {
       </div>`;
     this.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
       this.#status = b.dataset.tab;
+      this.#error = "";
       this.#note = "";
       this.#skip = 0;
       this.#load();
     }));
     this.querySelectorAll("[data-page]").forEach((b) => b.addEventListener("click", () => {
+      this.#error = "";
+      this.#note = "";
       this.#skip = Math.max(0, this.#skip + Number(b.dataset.page) * PAGE);
       this.#load();
     }));
     const byId = (id) => items.find((c) => c.id === id);
     this.querySelectorAll("[data-reply]").forEach((b) => b.addEventListener("click", () => {
+      this.#error = "";
+      this.#note = "";
       this.#replyFor = b.dataset.reply;
       this.#draft = "";
       this.#notify = true;
       this.#render();
     }));
     this.querySelectorAll("[data-cancel]").forEach((b) => b.addEventListener("click", () => {
+      this.#error = "";
+      this.#note = "";
       this.#replyFor = null;
       this.#draft = "";
       this.#render();

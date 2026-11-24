@@ -204,6 +204,35 @@ public class ReplyApiTests : UmbracoIntegrationTest
     }
 
     [Test]
+    public async Task List_marks_replies_of_a_spam_comment()
+    {
+        var page = Guid.NewGuid();
+        var parent = Row(page, CommentStatus.Approved, 1, "Ana", "ana@example.com");
+        Comments.Add(parent);
+        var response = (ReplyResponse)((ObjectResult)await Admin().Reply(parent.Id, new ReplyRequest("Thanks.", Notify: false))).Value!;
+        await Admin().Spam(parent.Id);
+
+        var reply = Items(await Admin().List(status: "approved")).Single(i => i.Id == response.Id);
+
+        Assert.That(reply.ParentStatus, Is.EqualTo("spam"));
+        Assert.That(reply.ParentHasEmail, Is.True);
+    }
+
+    [Test]
+    public async Task List_reports_a_parent_without_email()
+    {
+        var page = Guid.NewGuid();
+        var parent = Row(page, CommentStatus.Approved, 1, "Ben");
+        Comments.Add(parent);
+        var response = (ReplyResponse)((ObjectResult)await Admin().Reply(parent.Id, new ReplyRequest("Thanks."))).Value!;
+
+        var reply = Items(await Admin().List(status: "approved")).Single(i => i.Id == response.Id);
+
+        Assert.That(reply.ParentStatus, Is.EqualTo("approved"));
+        Assert.That(reply.ParentHasEmail, Is.False);
+    }
+
+    [Test]
     public async Task Reply_under_a_spam_parent_cannot_be_emailed()
     {
         var page = Guid.NewGuid();

@@ -34,7 +34,7 @@ Content section, Comments dashboard. Tabs for pending, approved and spam. Approv
 
 ## Replies
 
-In the Approved tab, press Reply on a comment, write the reply and press Send reply. The reply is saved as approved and shows under the comment on the page, with your backoffice name and a "Reply" badge. Replies go one level deep, so a reply can not be replied to. You need Browse on the comment's page. Deleting a comment deletes its replies, and marking it spam hides them.
+In the Approved tab, press Reply on a comment, write the reply and press Send reply. The reply is saved as approved and shows under the comment on the page, with your backoffice name and a "Reply" badge. Replies go one level deep, so a reply can not be replied to. You need Browse on the comment's page. Deleting a comment deletes its replies, and marking it spam hides them. A reply whose comment is not approved is marked "Hidden on the page" in the dashboard.
 
 If the commenter left an email address, "Email {name}" is ticked and they get one email with the reply and a link to it on the page. The email goes through Umbraco's own sender, so it needs `Umbraco:CMS:Global:Smtp` or a handler for Umbraco's `SendEmailNotification`. Without either, the reply still posts and the dashboard shows "Not emailed". Once mail works, press Send email on the reply. Each reply is emailed at most once, even if two people press Send email at the same time. A failed send can be tried again. Send email is refused once the comment or the reply is no longer approved.
 
