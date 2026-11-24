@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
 ### Changes
 
@@ -10,6 +10,7 @@
 - A migration adds three nullable columns to `baryoComment`: `ParentId` (indexed), `AuthorUserKey` and `NotifiedUtc`. Existing rows are untouched.
 - Deleting a comment deletes its replies. Marking it spam hides them. Retention removes replies whose comment is gone.
 - New options `ReplyTo` (reply-to address on the email) and `PublicBaseUrl` (host for the link in the email, for a backoffice on another host). Both are validated at startup.
+- The dashboard script URL carries the package version (`comments-dashboard.js?v=0.3.0`), so browsers load the new dashboard after an upgrade instead of a cached one.
 - The form's email hint now reads "Never shown on the page. Used only to email you if someone replies."
 - Replies need a repository that implements the new `ICommentRepositoryThreaded`. The built-in one does. `ICommentRepository` and `ICommentRepositoryScoped` are unchanged.
 - `CommentsApiController` takes two more constructor parameters (`CommentReplies`, `IOptions<CommentsOptions>`). MVC creates it, so only code that constructs it by hand needs to change.
