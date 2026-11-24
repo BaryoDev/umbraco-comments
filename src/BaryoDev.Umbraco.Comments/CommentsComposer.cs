@@ -29,8 +29,11 @@ public sealed class CommentsComposer : IComposer
         services.AddSingleton<CommentRepository>();
         services.AddSingleton<ICommentRepository>(sp => sp.GetRequiredService<CommentRepository>());
         services.AddSingleton<ICommentRepositoryScoped>(sp => sp.GetRequiredService<CommentRepository>());
+        services.AddSingleton<ICommentRepositoryThreaded>(sp => sp.GetRequiredService<CommentRepository>());
         services.AddSingleton<RateLimiter>();
         services.AddSingleton<FormToken>();
         services.AddTransient<CommentSubmission>();
+        services.TryAddSingleton<ICommentReplyEmail, CommentReplyEmail>();
+        services.AddTransient<CommentReplies>();
     }
 }

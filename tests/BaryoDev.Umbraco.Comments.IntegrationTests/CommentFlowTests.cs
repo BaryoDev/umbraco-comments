@@ -46,6 +46,10 @@ public class CommentFlowTests : UmbracoIntegrationTest
         builder.Services.TryAddSingleton<ICommentRepository>(sp => sp.GetRequiredService<CommentRepository>());
         builder.Services.TryAddSingleton<ICommentRepositoryScoped>(sp => sp.GetRequiredService<CommentRepository>());
         builder.AddNotificationHandler<ContentDeletedNotification, CommentsContentDeletedHandler>();
+        // The moderation controller takes the reply service since 0.3.0.
+        builder.Services.TryAddSingleton(TimeProvider.System);
+        builder.Services.TryAddSingleton<ICommentReplyEmail, CommentReplyEmail>();
+        builder.Services.TryAddTransient<CommentReplies>();
     }
 
     [SetUp]

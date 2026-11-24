@@ -26,4 +26,8 @@ public sealed class CommentsOptions
     public int? SpamRetentionDays { get; set; }
     /// <summary>Delete pending comments older than this many days. Null keeps them. Approved comments are never deleted by age.</summary>
     public int? PendingRetentionDays { get; set; }
+    /// <summary>Address that reply emails ask the commenter to answer. Null leaves it out.</summary>
+    public string? ReplyTo { get; set; }
+    /// <summary>Public site address used in reply email links, for example https://baryo.dev. Null uses the absolute URL Umbraco builds.</summary>
+    public string? PublicBaseUrl { get; set; }
 }
