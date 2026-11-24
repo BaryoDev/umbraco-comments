@@ -119,12 +119,13 @@ public class ReplyDataTests : UmbracoIntegrationTest
     }
 
     [Test]
-    public void Migration_runs_twice_without_error_with_reply_columns()
+    public async Task Migration_runs_twice_without_error_with_reply_columns()
     {
         Assert.That(Columns(), Is.SupersetOf(new[] { "ParentId", "AuthorUserKey", "NotifiedUtc" }));
 
         var executor = Services.GetRequiredService<IMigrationPlanExecutor>();
-        Assert.DoesNotThrowAsync(async () => await executor.ExecutePlanAsync(new CommentsMigrationPlan(), string.Empty));
+        var result = await executor.ExecutePlanAsync(new CommentsMigrationPlan(), string.Empty);
+        AssertRan([result]);
         Assert.That(Columns(), Is.SupersetOf(new[] { "ParentId", "AuthorUserKey", "NotifiedUtc" }));
     }
 

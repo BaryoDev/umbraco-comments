@@ -166,7 +166,7 @@ class CommentsDashboard extends Base {
         ${this.#error ? `<p class="bdc-err">${esc(this.#error)}</p>` : ""}
         ${this.#note ? `<p class="bdc-ok">${esc(this.#note)}</p>` : ""}
         <div class="bdc-tabs">
-          ${TABS.map(([key, label]) => `<button class="bdc-tab" data-tab="${key}" aria-pressed="${this.#status === key}">${label}<span class="bdc-count">${countOf(key)}</span></button>`).join("")}
+          ${TABS.map(([key, label]) => `<button class="bdc-tab" data-tab="${key}" aria-pressed="${this.#status === key}" ${this.#busy ? "disabled" : ""}>${label}<span class="bdc-count">${countOf(key)}</span></button>`).join("")}
         </div>
         <div class="bdc-box">
           ${items.length === 0 ? `<p class="bdc-note">${this.#busy ? "Loading." : "Nothing here."}</p>` : items.map((c) => `
@@ -176,7 +176,7 @@ class CommentsDashboard extends Base {
               <p class="bdc-item__body">${esc(c.body)}</p>
               ${this.#replyFor === c.id ? `
               <div class="bdc-reply">
-                <textarea class="bdc-reply__text" maxlength="4000" rows="4" ${this.#busy ? "disabled" : ""}>${esc(this.#draft)}</textarea>
+                <textarea class="bdc-reply__text" aria-label="Reply to ${esc(c.name)}" maxlength="4000" rows="4" ${this.#busy ? "disabled" : ""}>${esc(this.#draft)}</textarea>
                 ${c.email ? `<label class="bdc-reply__check"><input type="checkbox" data-notify ${this.#notify ? "checked" : ""} ${this.#busy ? "disabled" : ""} /> Email ${esc(c.name)}</label>` : ""}
                 <div class="bdc-actions">
                   <button class="bdc-btn primary" data-send="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Send reply</button>
@@ -199,6 +199,7 @@ class CommentsDashboard extends Base {
         </div>
       </div>`;
     this.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
+      if (this.#busy) return;
       this.#status = b.dataset.tab;
       this.#error = "";
       this.#note = "";

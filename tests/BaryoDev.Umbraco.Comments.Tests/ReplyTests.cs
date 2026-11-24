@@ -33,6 +33,10 @@ public class ReplyTests
         {
             lock (Rows)
             {
+                if (ThrowOnClaim)
+                {
+                    throw new InvalidOperationException("database down");
+                }
                 CommentRow? row = Get(replyId);
                 if (row is null || row.ParentId is null || row.NotifiedUtc is not null)
                 {
@@ -44,6 +48,8 @@ public class ReplyTests
         }
 
         public bool ThrowOnRelease { get; set; }
+
+        public bool ThrowOnClaim { get; set; }
 
         public void ReleaseNotify(Guid replyId)
         {
@@ -308,6 +314,22 @@ public class ReplyTests
         Assert.Equal(NotifyResult.NotApproved, result);
         Assert.Empty(email.Sent);
         Assert.Null(repo.Get(outcome.ReplyId!.Value)!.NotifiedUtc);
+    }
+
+    [Fact]
+    public async Task Reply_is_saved_when_the_claim_throws()
+    {
+        var repo = new ThreadedRepo { ThrowOnClaim = true };
+        var parent = Parent();
+        repo.Add(parent);
+        var service = Build(repo, new RecordingEmail());
+
+        var outcome = await service.ReplyAsync(parent.Id, "Thanks for trying it", true, Author, TestContext.Current.CancellationToken);
+
+        Assert.Equal(ReplyResult.Saved, outcome.Result);
+        Assert.NotNull(outcome.ReplyId);
+        Assert.Equal(NotifyResult.Failed, outcome.Email);
+        Assert.NotNull(repo.Get(outcome.ReplyId!.Value));
     }
 
     [Fact]

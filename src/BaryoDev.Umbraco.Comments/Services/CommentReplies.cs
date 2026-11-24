@@ -75,7 +75,16 @@ public sealed class CommentReplies(
         NotifyResult? sent = null;
         if (notify && !string.IsNullOrWhiteSpace(parent.Email))
         {
-            sent = await NotifyAsync(reply.Id, ct);
+            try
+            {
+                sent = await NotifyAsync(reply.Id, ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // The reply is already saved, so report the email as failed instead of failing the request.
+                logger.LogError(ex, "Emailing the commenter about reply {ReplyId} failed", reply.Id);
+                sent = NotifyResult.Failed;
+            }
         }
         return new ReplyOutcome(ReplyResult.Saved, reply.Id, sent);
     }
