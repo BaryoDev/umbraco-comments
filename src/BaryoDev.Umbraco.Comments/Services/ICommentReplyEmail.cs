@@ -23,7 +23,7 @@ public interface ICommentReplyEmail
 
 public sealed class CommentReplyEmail(
     IEmailSender sender,
-    IOptions<GlobalSettings> globalSettings,
+    IOptionsMonitor<GlobalSettings> globalSettings,
     IOptions<CommentsOptions> options,
     IContentService content,
     IPublishedUrlProvider urls,
@@ -35,7 +35,7 @@ public sealed class CommentReplyEmail(
     {
         get
         {
-            GlobalSettings g = globalSettings.Value;
+            GlobalSettings g = globalSettings.CurrentValue;
             return g.IsSmtpServerConfigured
                 || g.IsPickupDirectoryLocationConfigured
                 || (options.Value.TrustEmailHandlers && sender.CanSendRequiredEmail());
@@ -58,7 +58,7 @@ public sealed class CommentReplyEmail(
         (string subject, string html) = Compose(parent, reply, pageName, link);
 
         var message = new EmailMessage(
-            globalSettings.Value.Smtp?.From,
+            globalSettings.CurrentValue.Smtp?.From,
             [parent.Email!],
             null,
             null,

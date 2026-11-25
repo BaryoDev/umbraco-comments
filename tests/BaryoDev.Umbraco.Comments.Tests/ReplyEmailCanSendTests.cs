@@ -16,12 +16,19 @@ public class ReplyEmailCanSendTests
         public bool CanSendRequiredEmail() => hasHandler;
     }
 
+    private sealed class FixedSettings(GlobalSettings value) : IOptionsMonitor<GlobalSettings>
+    {
+        public GlobalSettings CurrentValue => value;
+        public GlobalSettings Get(string? name) => value;
+        public IDisposable? OnChange(Action<GlobalSettings, string?> listener) => null;
+    }
+
     private static bool CanSend(bool handler, bool trust, string? host = null, string? pickup = null)
     {
         var settings = new GlobalSettings { Smtp = host is null && pickup is null ? null : new SmtpSettings { Host = host!, PickupDirectoryLocation = pickup } };
         var email = new CommentReplyEmail(
             new HandlerSender(handler),
-            Options.Create(settings),
+            new FixedSettings(settings),
             Options.Create(new CommentsOptions { TrustEmailHandlers = trust }),
             null!,
             null!,

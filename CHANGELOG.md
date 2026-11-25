@@ -5,7 +5,7 @@
 ### Changes
 
 - A reply is only marked emailed when mail can go out. Before, any registered `SendEmailNotification` handler counted as mail being set up. If the handler did not set `IsHandled` and there was no SMTP or pickup directory, Umbraco dropped the email and the dashboard still showed "Emailed" (#12).
-- Without SMTP or a pickup directory, replies are now only emailed when `BaryoDev:Comments:TrustEmailHandlers` is true (default false). A site that delivers through its own `SendEmailNotification` handler must set it, and the handler must set `IsHandled` for the `BaryoComments.Reply` email type. Sites with SMTP or a pickup directory need no change.
+- Without SMTP or a pickup directory, replies are now only emailed when `BaryoDev:Comments:TrustEmailHandlers` is true (default false). A site that delivers through its own `SendEmailNotification` handler must set it, and the handler must set `IsHandled` for the `BaryoComments.Reply` email type. Sites with an SMTP host, or a pickup directory and `Umbraco:CMS:Global:Smtp:From`, need no change.
 
 ## 0.3.0
 
