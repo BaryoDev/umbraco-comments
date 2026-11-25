@@ -36,7 +36,7 @@ Content section, Comments dashboard. Tabs for pending, approved and spam. Approv
 
 In the Approved tab, press Reply on a comment, write the reply and press Send reply. The reply is saved as approved and shows under the comment on the page, with your backoffice name and a "Reply" badge. Replies go one level deep, so a reply can not be replied to. You need Browse on the comment's page. Deleting a comment deletes its replies, and marking it spam hides them. A reply whose comment is not approved is marked "Hidden on the page" in the dashboard.
 
-If the commenter left an email address, "Email {name}" is ticked and they get one email with the reply and a link to it on the page. The email goes through Umbraco's own sender, so it needs `Umbraco:CMS:Global:Smtp` or a handler for Umbraco's `SendEmailNotification`. Without either, the reply still posts and the dashboard shows "Not emailed". A `SendEmailNotification` handler must set `IsHandled` for the `BaryoComments.Reply` email type. If it does not and there is no SMTP or pickup directory, Umbraco drops the email and the reply still shows as emailed. Once mail works, press Send email on the reply. Each reply is emailed at most once, even if two people press Send email at the same time. A failed send can be tried again. Send email is refused once the comment or the reply is no longer approved.
+If the commenter left an email address, "Email {name}" is ticked and they get one email with the reply and a link to it on the page. The email goes through Umbraco's own sender, so it needs `Umbraco:CMS:Global:Smtp` (a host or a pickup directory). If you deliver mail with your own `SendEmailNotification` handler instead, set `BaryoDev:Comments:TrustEmailHandlers` to `true` (default `false`). The handler must set `IsHandled` for the `BaryoComments.Reply` email type, or Umbraco drops the email and the reply still shows as emailed. Without SMTP, a pickup directory or `TrustEmailHandlers`, the reply still posts and the dashboard shows "Not emailed". Once mail works, press Send email on the reply. Each reply is emailed at most once, even if two people press Send email at the same time. A failed send can be tried again. Send email is refused once the comment or the reply is no longer approved.
 
 `ReplyTo` is the address the commenter's mail app answers to. `PublicBaseUrl` (for example `https://baryo.dev`) is the host used for the link in the email. Set it when the backoffice runs on a different host from the public site, or the link points at the backoffice host. To change the wording or send mail another way, register your own `ICommentReplyEmail`.
 
@@ -91,7 +91,8 @@ Section `BaryoDev:Comments` in appsettings:
       "SpamRetentionDays": null,
       "PendingRetentionDays": null,
       "ReplyTo": null,
-      "PublicBaseUrl": null
+      "PublicBaseUrl": null,
+      "TrustEmailHandlers": false
     }
   }
 }
