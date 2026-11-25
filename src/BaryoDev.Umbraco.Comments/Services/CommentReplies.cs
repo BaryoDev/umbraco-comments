@@ -123,7 +123,7 @@ public sealed class CommentReplies(
         {
             return NotifyResult.NotApproved;
         }
-        // Umbraco's sender returns without sending when SMTP is not set, so claim nothing here.
+        // Claim nothing unless mail can go out (SMTP, a pickup directory or a trusted handler).
         if (!email.CanSend)
         {
             return NotifyResult.CannotSend;

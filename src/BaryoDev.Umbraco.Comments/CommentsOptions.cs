@@ -30,4 +30,6 @@ public sealed class CommentsOptions
     public string? ReplyTo { get; set; }
     /// <summary>Public site address used in reply email links, for example https://baryo.dev. Null uses the absolute URL Umbraco builds.</summary>
     public string? PublicBaseUrl { get; set; }
+    /// <summary>True when a SendEmailNotification handler on this site delivers reply emails. Without SMTP or a pickup directory, replies are only emailed when this is set.</summary>
+    public bool TrustEmailHandlers { get; set; }
 }

@@ -15,7 +15,7 @@ namespace BaryoDev.Umbraco.Comments.Services;
 /// <summary>Tells a commenter that the site replied. Replace it to change the wording or the way mail goes out.</summary>
 public interface ICommentReplyEmail
 {
-    /// <summary>False when mail can not go out yet, for example no SMTP settings.</summary>
+    /// <summary>False when mail can not go out yet: no SMTP host, no pickup directory, and no trusted email handler.</summary>
     bool CanSend { get; }
 
     Task SendAsync(CommentRow parent, CommentRow reply, CancellationToken ct);
@@ -23,7 +23,7 @@ public interface ICommentReplyEmail
 
 public sealed class CommentReplyEmail(
     IEmailSender sender,
-    IOptions<GlobalSettings> globalSettings,
+    IOptionsMonitor<GlobalSettings> globalSettings,
     IOptions<CommentsOptions> options,
     IContentService content,
     IPublishedUrlProvider urls,
@@ -31,7 +31,16 @@ public sealed class CommentReplyEmail(
 {
     private const string EmailType = "BaryoComments.Reply";
 
-    public bool CanSend => sender.CanSendRequiredEmail();
+    public bool CanSend
+    {
+        get
+        {
+            GlobalSettings g = globalSettings.CurrentValue;
+            return g.IsSmtpServerConfigured
+                || g.IsPickupDirectoryLocationConfigured
+                || (options.Value.TrustEmailHandlers && sender.CanSendRequiredEmail());
+        }
+    }
 
     public async Task SendAsync(CommentRow parent, CommentRow reply, CancellationToken ct)
     {
@@ -49,7 +58,7 @@ public sealed class CommentReplyEmail(
         (string subject, string html) = Compose(parent, reply, pageName, link);
 
         var message = new EmailMessage(
-            globalSettings.Value.Smtp?.From,
+            globalSettings.CurrentValue.Smtp?.From,
             [parent.Email!],
             null,
             null,
@@ -58,7 +67,7 @@ public sealed class CommentReplyEmail(
             html,
             true,
             null);
-        // true lets a SendEmailNotification handler deliver it, which CanSendRequiredEmail also counts.
+        // true lets a SendEmailNotification handler deliver it. CanSend only allows that when TrustEmailHandlers is set.
         await sender.SendAsync(message, EmailType, true, null);
     }
 
