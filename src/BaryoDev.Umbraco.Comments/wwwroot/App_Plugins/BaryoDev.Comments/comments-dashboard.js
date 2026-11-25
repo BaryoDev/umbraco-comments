@@ -20,8 +20,10 @@ function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
-// An import failure falls back to the browser confirm. A cancel rejects and must not fall through.
+// Without the Umbraco element base or the modal module, fall back to the browser confirm.
+// A cancel rejects and must not fall through.
 async function confirmDelete(host) {
+  if (Base === HTMLElement) return window.confirm("Delete this comment for good?");
   let modal;
   try {
     modal = await import("@umbraco-cms/backoffice/modal");
@@ -78,6 +80,7 @@ class CommentsDashboard extends Base {
   #data = null;
   #error = "";
   #busy = false;
+  #confirming = false;
   #skip = 0;
   #note = "";
   #replyFor = null;
@@ -103,7 +106,16 @@ class CommentsDashboard extends Base {
   }
 
   async #act(id, action) {
-    if (action === "delete" && !(await confirmDelete(this))) return;
+    // The dialog does not block like confirm() did, so a second click must not open another one.
+    if (this.#busy || this.#confirming) return;
+    if (action === "delete") {
+      this.#confirming = true;
+      try {
+        if (!(await confirmDelete(this))) return;
+      } finally {
+        this.#confirming = false;
+      }
+    }
     this.#note = "";
     this.#busy = true;
     this.#render();
@@ -185,7 +197,7 @@ class CommentsDashboard extends Base {
         ${this.#error ? `<div class="bdc-msg bdc-msg--danger" role="alert">${esc(this.#error)}</div>` : ""}
         ${this.#note ? `<div class="bdc-msg bdc-msg--positive" role="status">${esc(this.#note)}</div>` : ""}
         <uui-tab-group>
-          ${TABS.map(([key, label]) => `<uui-tab data-tab="${key}" label="${label}" ${this.#status === key ? "active" : ""} ${this.#busy ? "disabled" : ""}><span>${label} <uui-tag look="secondary">${countOf(key)}</uui-tag></span></uui-tab>`).join("")}
+          ${TABS.map(([key, label]) => `<uui-tab data-tab="${key}" label="${label}" ${this.#status === key ? "active" : ""} ${this.#busy ? "disabled" : ""}><span>${label} <uui-tag look="secondary">${esc(countOf(key))}</uui-tag></span></uui-tab>`).join("")}
         </uui-tab-group>
         <uui-box>
           ${items.length === 0 ? `<p class="bdc-note">${this.#busy ? "Loading." : "Nothing here."}</p>` : items.map((c) => `
