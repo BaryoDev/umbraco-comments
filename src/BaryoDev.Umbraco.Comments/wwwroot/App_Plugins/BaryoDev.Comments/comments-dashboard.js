@@ -9,6 +9,8 @@ const REASONS = {
   notapproved: "the comment is not approved",
 };
 const TABS = [["pending", "Pending"], ["approved", "Approved"], ["spam", "Spam"]];
+const V = new URL(import.meta.url).search;
+const LOGO = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 134 32" role="img" aria-label="baryo.dev"><rect x="0" y="0" width="32" height="32" rx="8" fill="#0b7a55"/><path d="M9 8v16h7a5 5 0 0 0 0-10h-3" fill="none" stroke="#fbf7ee" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="24" cy="9" r="2.4" fill="#ffcd3c"/><text x="40" y="22" font-family="'Plus Jakarta Sans', system-ui, sans-serif" font-size="18" font-weight="700" fill="currentColor">baryo.dev</text></svg>`;
 
 const Base = await import("@umbraco-cms/backoffice/element-api")
   .then(({ UmbElementMixin }) => UmbElementMixin(HTMLElement))
@@ -16,6 +18,24 @@ const Base = await import("@umbraco-cms/backoffice/element-api")
 
 function esc(value) {
   return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+}
+
+// Without the Umbraco element base or the modal module, fall back to the browser confirm.
+// A cancel rejects and must not fall through.
+async function confirmDelete(host) {
+  if (Base === HTMLElement) return window.confirm("Delete this comment for good?");
+  let modal;
+  try {
+    modal = await import("@umbraco-cms/backoffice/modal");
+  } catch {
+    return window.confirm("Delete this comment for good?");
+  }
+  try {
+    await modal.umbConfirmModal(host, { headline: "Delete comment", content: "Delete this comment for good?", color: "danger", confirmLabel: "Delete" });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const tokens = new WeakMap();
@@ -60,6 +80,7 @@ class CommentsDashboard extends Base {
   #data = null;
   #error = "";
   #busy = false;
+  #confirming = false;
   #skip = 0;
   #note = "";
   #replyFor = null;
@@ -85,7 +106,16 @@ class CommentsDashboard extends Base {
   }
 
   async #act(id, action) {
-    if (action === "delete" && !confirm("Delete this comment for good?")) return;
+    // The dialog does not block like confirm() did, so a second click must not open another one.
+    if (this.#busy || this.#confirming) return;
+    if (action === "delete") {
+      this.#confirming = true;
+      try {
+        if (!(await confirmDelete(this))) return;
+      } finally {
+        this.#confirming = false;
+      }
+    }
     this.#note = "";
     this.#busy = true;
     this.#render();
@@ -157,18 +187,19 @@ class CommentsDashboard extends Base {
       : `${this.#skip + 1} to ${Math.min(this.#skip + PAGE, total)} of ${total}`;
     const when = (d) => new Date(d).toLocaleString();
     this.innerHTML = `
-      <link rel="stylesheet" href="${BASE}/brand.css" />
+      <link rel="stylesheet" href="${BASE}/dashboard.css${V}" />
       <div class="bdc-admin">
         <div class="bdc-admin__head">
-          <img src="${BASE}/logo.svg" alt="baryo.dev" />
-          <span>Comments</span>
+          ${LOGO}
+          <h1 class="bdc-admin__title">Comments</h1>
         </div>
-        ${this.#error ? `<p class="bdc-err">${esc(this.#error)}</p>` : ""}
-        ${this.#note ? `<p class="bdc-ok">${esc(this.#note)}</p>` : ""}
-        <div class="bdc-tabs">
-          ${TABS.map(([key, label]) => `<button class="bdc-tab" data-tab="${key}" aria-pressed="${this.#status === key}" ${this.#busy ? "disabled" : ""}>${label}<span class="bdc-count">${countOf(key)}</span></button>`).join("")}
-        </div>
-        <div class="bdc-box">
+        ${this.#busy ? "<uui-loader-bar></uui-loader-bar>" : ""}
+        ${this.#error ? `<div class="bdc-msg bdc-msg--danger" role="alert">${esc(this.#error)}</div>` : ""}
+        ${this.#note ? `<div class="bdc-msg bdc-msg--positive" role="status">${esc(this.#note)}</div>` : ""}
+        <uui-tab-group>
+          ${TABS.map(([key, label]) => `<uui-tab data-tab="${key}" label="${label}" ${this.#status === key ? "active" : ""} ${this.#busy ? "disabled" : ""}><span>${label} <uui-tag look="secondary">${esc(countOf(key))}</uui-tag></span></uui-tab>`).join("")}
+        </uui-tab-group>
+        <uui-box>
           ${items.length === 0 ? `<p class="bdc-note">${this.#busy ? "Loading." : "Nothing here."}</p>` : items.map((c) => `
             <div class="bdc-item">
               <div class="bdc-item__meta">${esc(c.name)}${c.email ? ` (${esc(c.email)})` : ""} on ${esc(c.pageName ?? c.contentKey)} at ${esc(when(c.createdUtc))}</div>
@@ -176,26 +207,26 @@ class CommentsDashboard extends Base {
               <p class="bdc-item__body">${esc(c.body)}</p>
               ${this.#replyFor === c.id ? `
               <div class="bdc-reply">
-                <textarea class="bdc-reply__text" aria-label="Reply to ${esc(c.name)}" maxlength="4000" rows="4" ${this.#busy ? "disabled" : ""}>${esc(this.#draft)}</textarea>
-                ${c.email ? `<label class="bdc-reply__check"><input type="checkbox" data-notify ${this.#notify ? "checked" : ""} ${this.#busy ? "disabled" : ""} /> Email ${esc(c.name)}</label>` : ""}
+                <uui-textarea class="bdc-reply__text" label="Reply to ${esc(c.name)}" maxlength="4000" rows="4" value="${esc(this.#draft)}" ${this.#busy ? "disabled" : ""}></uui-textarea>
+                ${c.email ? `<uui-checkbox data-notify label="Email ${esc(c.name)}" ${this.#notify ? "checked" : ""} ${this.#busy ? "disabled" : ""}></uui-checkbox>` : ""}
                 <div class="bdc-actions">
-                  <button class="bdc-btn primary" data-send="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Send reply</button>
-                  <button class="bdc-btn" data-cancel ${this.#busy ? "disabled" : ""}>Cancel</button>
+                  <uui-button look="primary" color="positive" label="Send reply" data-send="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Send reply</uui-button>
+                  <uui-button label="Cancel" data-cancel ${this.#busy ? "disabled" : ""}>Cancel</uui-button>
                 </div>
               </div>` : ""}
               <div class="bdc-actions">
-                ${c.canReply && this.#replyFor !== c.id ? `<button class="bdc-btn primary" data-reply="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Reply</button>` : ""}
-                ${c.canNotify ? `<button class="bdc-btn" data-email="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Send email</button>` : ""}
-                ${c.status !== "approved" ? `<button class="bdc-btn primary" data-act="approve" data-id="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Approve</button>` : ""}
-                ${c.status !== "spam" ? `<button class="bdc-btn" data-act="spam" data-id="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Mark spam</button>` : ""}
-                <button class="bdc-btn danger" data-act="delete" data-id="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Delete</button>
+                ${c.canReply && this.#replyFor !== c.id ? `<uui-button look="secondary" label="Reply" data-reply="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Reply</uui-button>` : ""}
+                ${c.canNotify ? `<uui-button look="secondary" label="Send email" data-email="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Send email</uui-button>` : ""}
+                ${c.status !== "approved" ? `<uui-button look="primary" color="positive" label="Approve" data-act="approve" data-id="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Approve</uui-button>` : ""}
+                ${c.status !== "spam" ? `<uui-button look="secondary" label="Mark spam" data-act="spam" data-id="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Mark spam</uui-button>` : ""}
+                <uui-button look="secondary" color="danger" label="Delete" data-act="delete" data-id="${esc(c.id)}" ${this.#busy ? "disabled" : ""}>Delete</uui-button>
               </div>
             </div>`).join("")}
-        </div>
+        </uui-box>
         <div class="bdc-actions">
-          <button class="bdc-btn" data-page="-1" ${this.#skip === 0 || this.#busy ? "disabled" : ""}>Previous</button>
+          <uui-button look="secondary" label="Previous page" data-page="-1" ${this.#skip === 0 || this.#busy ? "disabled" : ""}>Previous</uui-button>
           <span class="bdc-note">${range}</span>
-          <button class="bdc-btn" data-page="1" ${!hasMore || this.#busy ? "disabled" : ""}>Next</button>
+          <uui-button look="secondary" label="Next page" data-page="1" ${!hasMore || this.#busy ? "disabled" : ""}>Next</uui-button>
         </div>
       </div>`;
     this.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => {
