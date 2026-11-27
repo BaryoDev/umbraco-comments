@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+### Changes
+
+- The dashboard's status tabs tell screen readers which one is selected again (#15). Umbraco UI 2.1.1 tabs do not set `aria-selected` on their tab button, so the dashboard sets it after each render.
+
 ## 0.4.0
 
 ### Changes

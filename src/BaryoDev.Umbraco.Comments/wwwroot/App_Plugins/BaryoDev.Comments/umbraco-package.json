@@ -1,14 +1,14 @@
 {
   "$schema": "../../umbraco-package-schema.json",
   "name": "BaryoDev.Umbraco.Comments",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "allowTelemetry": false,
   "extensions": [
     {
       "type": "dashboard",
       "alias": "BaryoDev.Comments.Dashboard",
       "name": "Comments",
-      "element": "/App_Plugins/BaryoDev.Comments/comments-dashboard.js?v=0.4.0",
+      "element": "/App_Plugins/BaryoDev.Comments/comments-dashboard.js?v=0.4.1",
       "weight": -10,
       "meta": {
         "label": "Comments",

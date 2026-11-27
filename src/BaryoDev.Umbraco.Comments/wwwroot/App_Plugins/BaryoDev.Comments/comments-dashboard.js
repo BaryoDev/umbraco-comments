@@ -75,6 +75,15 @@ async function call(host, path, method = "GET", body) {
   return response.json();
 }
 
+// UUI 2.1.1 tabs do not set aria-selected on their inner tab button (umbraco/Umbraco.UI#1565), so screen readers would not hear which status is shown.
+async function markSelected(root) {
+  await customElements.whenDefined("uui-tab");
+  for (const tab of root.querySelectorAll("uui-tab")) {
+    await tab.updateComplete;
+    tab.shadowRoot?.getElementById("button")?.setAttribute("aria-selected", String(tab.active === true));
+  }
+}
+
 class CommentsDashboard extends Base {
   #status = "pending";
   #data = null;
@@ -269,6 +278,7 @@ class CommentsDashboard extends Base {
       if (!this.#busy) this.#sendEmail(b.dataset.email);
     }));
     this.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", () => this.#act(b.dataset.id, b.dataset.act)));
+    markSelected(this);
   }
 }
 
